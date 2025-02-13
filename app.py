@@ -58,13 +58,19 @@ def get_filtered_data(df_base, codigo_bip, etapa, anio_termino):
     Determina los años de gasto (desde el primer año con gasto > 0 hasta AÑO DE TERMINO)
     y agrupa los datos por ITEMS.
     """
+    # Se normalizan los datos para el filtrado
     df_filtered = df_base[
-        (df_base["CODIGO BIP"].astype(str).str.strip().str.upper() == codigo_bip) &
-        (df_base["ETAPA"].str.upper() == etapa)
+        (df_base["CODIGO BIP"].astype(str).str.strip().str.upper() == codigo_bip.strip().upper()) &
+        (df_base["ETAPA"].astype(str).str.strip().str.upper() == etapa.strip().upper())
     ]
+    
     if df_filtered.empty:
         st.error("No se encontraron datos para el CODIGO BIP y ETAPA seleccionados.")
         return None, None, None
+
+    # Opcional: Descomenta la siguiente línea para ver los primeros registros filtrados (útil para depuración)
+    # st.write("Datos filtrados:", df_filtered.head())
+
     expense_cols = [col for col in df_filtered.columns if str(col).isdigit() and 2011 <= int(col) <= 2024]
     df_grouped = df_filtered.groupby("ITEMS")[expense_cols].sum()
     sorted_years = sorted([int(col) for col in expense_cols])
@@ -227,7 +233,11 @@ def main():
     st.sidebar.header("Filtrar Datos")
     codigo_bip_list = sorted(df_base["CODIGO BIP"].dropna().unique().tolist())
     selected_codigo_bip = st.sidebar.selectbox("Seleccione el CODIGO BIP:", codigo_bip_list)
-    selected_etapa = st.sidebar.selectbox("Seleccione la ETAPA:", ["DISEÑO", "EJECUCION", "PREFACTIBILIDAD"])
+    
+    # Se obtienen las etapas únicas de la base de datos para evitar errores de coincidencia
+    etapa_list = sorted(df_base["ETAPA"].dropna().unique().tolist())
+    selected_etapa = st.sidebar.selectbox("Seleccione la ETAPA:", etapa_list)
+    
     anio_termino = st.sidebar.number_input("Ingrese el AÑO DE TERMINO del proyecto:", min_value=2011, max_value=2100, value=2024, step=1)
     
     if st.sidebar.button("Generar Planilla"):
@@ -235,7 +245,7 @@ def main():
         if df_grouped is None:
             return
         
-        # Título del Proyecto en un contenedor de tamaño reducido
+        # Muestra el recuadro de información del proyecto en un contenedor compacto
         nombre_proyecto = df_filtered["NOMBRE"].iloc[0] if "NOMBRE" in df_filtered.columns else "Proyecto sin nombre"
         with st.container():
             st.markdown(
