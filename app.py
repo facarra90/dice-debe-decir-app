@@ -39,7 +39,7 @@ def load_conversion_factors():
 def format_number_custom(x):
     """
     Convierte un número a entero sin decimales y lo formatea con puntos como separador de miles.
-    Ejemplo: 9182936 se mostrará como "9.182.936"
+    Ejemplo: 9182936 se mostrará como "9.182.936", 0 se mostrará como "0".
     """
     try:
         return f"{int(round(x)):,}".replace(",", ".")
@@ -49,17 +49,24 @@ def format_number_custom(x):
 def style_df_contabilidad(df):
     """
     Devuelve un objeto Styler que aplica el formato contable:
-      - A los valores numéricos se les aplica la función format_number_custom.
-      - Todo el contenido se alinea a la izquierda.
+      - Los valores numéricos se formatean sin decimales y con puntos como separador de miles.
+      - Toda la tabla se alinea a la izquierda, incluida la columna "Total".
     """
-    return df.style.format(lambda x: format_number_custom(x) if isinstance(x, (int, float)) else x) \
-                    .set_properties(**{'text-align': 'left'})
+    styler = df.style.format(lambda x: format_number_custom(x) if isinstance(x, (int, float)) else x)
+    # Forzamos la alineación a la izquierda para todas las celdas
+    styler = styler.set_properties(**{'text-align': 'left'})
+    # Además, nos aseguramos de que la columna "Total" esté alineada a la izquierda
+    if "Total" in df.columns:
+        styler = styler.set_properties(subset=["Total"], **{'text-align': 'left'})
+    # Alinear los encabezados a la izquierda:
+    styler = styler.set_table_styles([{'selector': 'th', 'props': [('text-align', 'left')]}])
+    return styler
 
 # ----- FUNCION PARA AGREGAR TOTALES (fila y columna) -----
 
 def append_totals(df):
     """
-    Agrega una columna "Total" a cada fila (suma de las columnas numéricas)
+    Agrega una columna "Total" que es la suma de las columnas numéricas de cada fila
     y añade una fila final "Total" con la suma de cada columna numérica.
     Las columnas no numéricas quedan vacías en la fila total.
     """
@@ -261,28 +268,4 @@ def main():
         
         # Sección 4: Programación en Moneda Original
         st.markdown("### Programación en Moneda Original")
-        target_prog_year = st.number_input("Convertir a año (Programación):",
-                                             min_value=1900, max_value=2100,
-                                             value=2010, step=1, key="prog_year")
-        prog_df = compute_programming_table(edited_original_df, global_years, conversion_factors, target_prog_year)
-        if prog_df is not None:
-            prog_df_totals = append_totals(prog_df)
-            st.table(style_df_contabilidad(prog_df_totals))
-        
-        st.markdown("### Exportar a Excel")
-        if st.button("Exportar a Excel"):
-            excel_data = export_to_excel(edited_original_df, conv_df, extra_df, prog_df, selected_codigo_bip)
-            st.download_button(label="Descargar Excel", data=excel_data,
-                               file_name="exported_data.xlsx",
-                               mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-
-def style_df_contabilidad(df):
-    """
-    Devuelve un objeto Styler que formatea los números al estilo contable:
-    sin decimales, con puntos como separador de miles, y alinea todo a la izquierda.
-    """
-    return df.style.format(lambda x: format_number_custom(x) if isinstance(x, (int, float)) else x) \
-                   .set_properties(**{'text-align': 'left'})
-
-if __name__ == '__main__':
-    main()
+        target_prog_year = st.number_input("Convertir a año (Pr
