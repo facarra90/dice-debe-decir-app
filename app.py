@@ -50,12 +50,11 @@ def style_df_contabilidad(df):
     """
     Devuelve un objeto Styler que aplica el formato contable:
       - Se formatean los números sin decimales y con puntos como separador de miles.
-      - Toda la tabla se alinea a la izquierda, incluyendo la columna "Total" (si existe).
+      - Toda la tabla se alinea a la izquierda, incluyendo la columna "Total".
     """
     styler = df.style.format(lambda x: format_number_custom(x) if isinstance(x, (int, float)) else x)
     styler = styler.set_properties(**{'text-align': 'left'})
-    if "Total" in df.columns:
-        styler = styler.set_properties(subset=["Total"], **{'text-align': 'left'})
+    # Alinear encabezados a la izquierda
     styler = styler.set_table_styles([{'selector': 'th', 'props': [('text-align', 'left')]}])
     return styler
 
@@ -247,6 +246,9 @@ def main():
             edited_original_df = st.experimental_data_editor(df_grouped, key="original_editor")
         original_df_totals = append_totals(edited_original_df)
         st.table(style_df_contabilidad(original_df_totals))
+        
+        # Título entre la Tabla 1 y Tabla 2
+        st.markdown("### Anualizacion de la Inversion")
         
         # Sección 2: Conversión a Moneda Pesos (M$)
         st.markdown("### Conversión a Moneda Pesos (M$)")
