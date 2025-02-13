@@ -54,7 +54,6 @@ def style_df_contabilidad(df):
     """
     styler = df.style.format(lambda x: format_number_custom(x) if isinstance(x, (int, float)) else x)
     styler = styler.set_properties(**{'text-align': 'left'})
-    # Alinear encabezados a la izquierda
     styler = styler.set_table_styles([{'selector': 'th', 'props': [('text-align', 'left')]}])
     return styler
 
@@ -247,7 +246,7 @@ def main():
         original_df_totals = append_totals(edited_original_df)
         st.table(style_df_contabilidad(original_df_totals))
         
-        # Título entre la Tabla 1 y Tabla 2
+        # Título entre la Tabla 1 y la Tabla 2
         st.markdown("### Anualizacion de la Inversion")
         
         # Sección 2: Conversión a Moneda Pesos (M$)
