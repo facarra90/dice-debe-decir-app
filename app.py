@@ -279,4 +279,10 @@ def main():
 def style_df_contabilidad(df):
     """
     Devuelve un objeto Styler que formatea los números al estilo contable:
-    sin decimales, con puntos como separador de miles, y alinea todo a la izqui
+    sin decimales, con puntos como separador de miles, y alinea todo a la izquierda.
+    """
+    return df.style.format(lambda x: format_number_custom(x) if isinstance(x, (int, float)) else x) \
+                   .set_properties(**{'text-align': 'left'})
+
+if __name__ == '__main__':
+    main()
