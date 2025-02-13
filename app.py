@@ -60,11 +60,12 @@ def format_number_custom(x):
         return x
 
 def format_dataframe_numbers(df):
-    """Recorre cada columna numérica del DataFrame y la convierte usando format_number_custom."""
+    """Convierte todas las columnas numéricas del DataFrame en cadenas formateadas."""
     df_formatted = df.copy()
     for col in df_formatted.select_dtypes(include=["number"]).columns:
         df_formatted[col] = df_formatted[col].apply(lambda x: format_number_custom(x))
-    return df_formatted
+    # Forzamos a que todo el DataFrame sea de tipo string para que se muestren los números formateados
+    return df_formatted.astype(str)
 
 # ----- FUNCION PARA AGREGAR TOTALES (fila y columna) -----
 
@@ -227,7 +228,7 @@ def main():
     selected_codigo_bip = st.sidebar.selectbox("Seleccione el CODIGO BIP:", codigo_bip_list)
     etapa_list = sorted(df_base["ETAPA"].dropna().unique().tolist())
     selected_etapa = st.sidebar.selectbox("Seleccione la ETAPA:", etapa_list)
-    anio_termino = st.sidebar.number_input("Ingrese el AÑO DE TERMINO del proyecto:", 
+    anio_termino = st.sidebar.number_input("Ingrese el AÑO DE TERMINO del proyecto:",
                                            min_value=2011, max_value=2100, value=2024, step=1)
     
     if st.sidebar.button("Generar Planilla"):
@@ -259,8 +260,8 @@ def main():
         
         # Sección 2: Conversión a Moneda Pesos (M$)
         st.markdown("### Conversión a Moneda Pesos (M$)")
-        target_conversion_year = st.number_input("Convertir a año:", 
-                                                   min_value=2011, max_value=2100, 
+        target_conversion_year = st.number_input("Convertir a año:",
+                                                   min_value=2011, max_value=2100,
                                                    value=datetime.datetime.now().year, step=1, key="conv_year")
         conv_df = compute_conversion_table(edited_original_df, global_years, conversion_factors, target_conversion_year)
         conv_df_totals = append_totals(conv_df)
@@ -274,7 +275,7 @@ def main():
         
         # Sección 4: Programación en Moneda Original
         st.markdown("### Programación en Moneda Original")
-        target_prog_year = st.number_input("Convertir a año (Programación):", 
+        target_prog_year = st.number_input("Convertir a año (Programación):",
                                              min_value=1900, max_value=2100, value=2010, step=1, key="prog_year")
         prog_df = compute_programming_table(edited_original_df, global_years, conversion_factors, target_prog_year)
         if prog_df is not None:
