@@ -278,8 +278,10 @@ def main():
         
         # --- Sección 2: Conversión ---
         st.markdown("### Conversión a Moneda Pesos (M$)")
+        # Se establece por defecto el año actual para la conversión
         target_conversion_year = st.number_input("Convertir a año:", 
-                                                   min_value=2011, max_value=2100, value=2024, step=1, key="conv_year")
+                                                   min_value=2011, max_value=2100, 
+                                                   value=datetime.datetime.now().year, step=1, key="conv_year")
         conv_df = compute_conversion_table(edited_original_df, global_years, conversion_factors, target_conversion_year)
         conv_totals_df, _ = compute_totals(conv_df)
         st.dataframe(conv_totals_df.style.format("{:,.0f}"))
