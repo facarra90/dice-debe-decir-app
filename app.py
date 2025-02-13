@@ -287,7 +287,15 @@ def main():
         # --- Sección 3: Cuadro Extra ---
         st.markdown("### Cuadro Extra")
         extra_df = compute_cuadro_extra(conv_df, global_years)
-        st.dataframe(extra_df.style.format("{:,.0f}"))
+        # Aplicar formato solo a las columnas numéricas
+        st.dataframe(
+            extra_df.style.format({
+                "Pagado al 31/12/2024": "{:,.0f}",
+                "Solicitado para el año 2025": "{:,.0f}",
+                "Solicitado años siguientes": "{:,.0f}",
+                "Costo Total": "{:,.0f}"
+            })
+        )
         
         # --- Sección 4: Programación en Moneda Original ---
         st.markdown("### Programación en Moneda Original")
