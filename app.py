@@ -8,7 +8,7 @@ from openpyxl.utils import get_column_letter
 # Configuración de la página para usar todo el ancho disponible
 st.set_page_config(layout="wide", page_title="Dice debe Decir - Aplicación de Gasto")
 
-# ----- FUNCIONES DE CARGA DE DATOS Y CONVERSIÓN -----
+# ----- FUNCIONES DE CARGA DE DATOS -----
 
 @st.cache_data
 def load_base_data():
@@ -34,21 +34,6 @@ def load_conversion_factors():
                 conversion[base_year][year_headers[idx]] = value
     return conversion
 
-def format_currency(value, prefix="$", decimals=0):
-    fmt = f"{{:,.{decimals}f}}"
-    s = fmt.format(value)
-    s = s.replace(",", "X").replace(".", ",").replace("X", ".")
-    return f"{prefix} {s}" if prefix else s
-
-def parse_int_currency(s):
-    if isinstance(s, (int, float)):
-        return int(s)
-    s = str(s).replace("$", "").replace("M$", "").replace(" ", "").replace(".", "")
-    try:
-        return int(s) if s != "" else 0
-    except:
-        return 0
-
 # ----- FORMATO NUMÉRICO PERSONALIZADO -----
 
 def format_number_custom(x):
@@ -61,23 +46,21 @@ def format_number_custom(x):
     except Exception:
         return x
 
-def format_dataframe_numbers(df):
+def style_df_contabilidad(df):
     """
-    Recorre todas las columnas del DataFrame.
-    Si la columna es numérica (según pd.api.types.is_numeric_dtype), la convierte usando format_number_custom.
+    Devuelve un objeto Styler que aplica el formato contable:
+      - A los valores numéricos se les aplica la función format_number_custom.
+      - Todo el contenido se alinea a la izquierda.
     """
-    df_formatted = df.copy()
-    for col in df_formatted.columns:
-        if pd.api.types.is_numeric_dtype(df_formatted[col]):
-            df_formatted[col] = df_formatted[col].apply(lambda x: format_number_custom(x) if pd.notnull(x) else "")
-    return df_formatted
+    return df.style.format(lambda x: format_number_custom(x) if isinstance(x, (int, float)) else x) \
+                    .set_properties(**{'text-align': 'left'})
 
 # ----- FUNCION PARA AGREGAR TOTALES (fila y columna) -----
 
 def append_totals(df):
     """
-    Agrega una columna "Total" (suma de columnas numéricas) a cada fila y
-    añade una fila final "Total" con la suma de cada columna numérica.
+    Agrega una columna "Total" a cada fila (suma de las columnas numéricas)
+    y añade una fila final "Total" con la suma de cada columna numérica.
     Las columnas no numéricas quedan vacías en la fila total.
     """
     df = df.copy()
@@ -221,8 +204,6 @@ def export_to_excel(original_df, conv_df, extra_df, prog_df, selected_codigo_bip
         writer.save()
     return output.getvalue()
 
-# ----- INTERFAZ STREAMLIT -----
-
 def main():
     st.title("Dice debe Decir - Aplicación de Gasto")
     df_base = load_base_data()
@@ -261,7 +242,7 @@ def main():
         else:
             edited_original_df = st.experimental_data_editor(df_grouped, key="original_editor")
         original_df_totals = append_totals(edited_original_df)
-        st.table(format_dataframe_numbers(original_df_totals))
+        st.table(style_df_contabilidad(original_df_totals))
         
         # Sección 2: Conversión a Moneda Pesos (M$)
         st.markdown("### Conversión a Moneda Pesos (M$)")
@@ -270,23 +251,23 @@ def main():
                                                    value=datetime.datetime.now().year, step=1, key="conv_year")
         conv_df = compute_conversion_table(edited_original_df, global_years, conversion_factors, target_conversion_year)
         conv_df_totals = append_totals(conv_df)
-        st.table(format_dataframe_numbers(conv_df_totals))
+        st.table(style_df_contabilidad(conv_df_totals))
         
         # Sección 3: Cuadro Extra (alineado a la izquierda, formato contable)
         st.markdown("### Cuadro Extra")
         extra_df = compute_cuadro_extra(conv_df, global_years)
         extra_df_totals = append_totals(extra_df)
-        # Se aplica el formateo y se fuerza la alineación a la izquierda
-        st.table(format_dataframe_numbers(extra_df_totals).style.set_properties(**{'text-align': 'left'}))
+        st.table(style_df_contabilidad(extra_df_totals))
         
         # Sección 4: Programación en Moneda Original
         st.markdown("### Programación en Moneda Original")
         target_prog_year = st.number_input("Convertir a año (Programación):",
-                                             min_value=1900, max_value=2100, value=2010, step=1, key="prog_year")
+                                             min_value=1900, max_value=2100,
+                                             value=2010, step=1, key="prog_year")
         prog_df = compute_programming_table(edited_original_df, global_years, conversion_factors, target_prog_year)
         if prog_df is not None:
             prog_df_totals = append_totals(prog_df)
-            st.table(format_dataframe_numbers(prog_df_totals))
+            st.table(style_df_contabilidad(prog_df_totals))
         
         st.markdown("### Exportar a Excel")
         if st.button("Exportar a Excel"):
@@ -295,5 +276,7 @@ def main():
                                file_name="exported_data.xlsx",
                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
-if __name__ == '__main__':
-    main()
+def style_df_contabilidad(df):
+    """
+    Devuelve un objeto Styler que formatea los números al estilo contable:
+    sin decimales, con puntos como separador de miles, y alinea todo a la izqui
