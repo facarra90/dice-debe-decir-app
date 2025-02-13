@@ -58,7 +58,7 @@ def get_filtered_data(df_base, codigo_bip, etapa, anio_termino):
     Determina los años de gasto (desde el primer año con gasto > 0 hasta AÑO DE TERMINO)
     y agrupa los datos por ITEMS.
     """
-    # Convertir a string y normalizar (esto evita problemas si alguno es None)
+    # Normalizar los filtros
     codigo_bip_norm = str(codigo_bip).strip().upper()
     etapa_norm = str(etapa).strip().upper()
     
@@ -71,14 +71,15 @@ def get_filtered_data(df_base, codigo_bip, etapa, anio_termino):
         st.error("No se encontraron datos para el CODIGO BIP y ETAPA seleccionados.")
         return None, None, None
 
-    # Opcional: Descomenta la siguiente línea para ver los primeros registros filtrados (útil para depuración)
-    # st.write("Datos filtrados:", df_filtered.head())
-
-    expense_cols = [col for col in df_filtered.columns if str(col).isdigit() and 2011 <= int(col) <= 2024]
+    # Convertir todas las columnas a cadena para evitar problemas de tipeo
+    df_filtered.columns = [str(col).strip() for col in df_filtered.columns]
+    
+    expense_cols = [col for col in df_filtered.columns if col.isdigit() and 2011 <= int(col) <= 2024]
     df_grouped = df_filtered.groupby("ITEMS")[expense_cols].sum()
     sorted_years = sorted([int(col) for col in expense_cols])
     start_year = None
     for y in sorted_years:
+        # Ahora las columnas son cadenas, así que usamos str(y)
         if df_grouped[str(y)].sum() > 0:
             start_year = y
             break
@@ -89,7 +90,7 @@ def get_filtered_data(df_base, codigo_bip, etapa, anio_termino):
         st.error("El AÑO DE TERMINO debe ser mayor o igual al año de inicio del gasto.")
         return None, None, None
     global_years = list(range(start_year, anio_termino + 1))
-    # Si faltan columnas, se rellenan con 0
+    # Rellenar columnas que puedan faltar
     cols = [str(y) for y in global_years]
     for col in cols:
         if col not in df_grouped.columns:
@@ -237,18 +238,19 @@ def main():
     codigo_bip_list = sorted(df_base["CODIGO BIP"].dropna().unique().tolist())
     selected_codigo_bip = st.sidebar.selectbox("Seleccione el CODIGO BIP:", codigo_bip_list)
     
-    # Se obtienen las etapas únicas de la base de datos para evitar errores de coincidencia
+    # Obtener las etapas únicas de la base de datos
     etapa_list = sorted(df_base["ETAPA"].dropna().unique().tolist())
     selected_etapa = st.sidebar.selectbox("Seleccione la ETAPA:", etapa_list)
     
-    anio_termino = st.sidebar.number_input("Ingrese el AÑO DE TERMINO del proyecto:", min_value=2011, max_value=2100, value=2024, step=1)
+    anio_termino = st.sidebar.number_input("Ingrese el AÑO DE TERMINO del proyecto:", 
+                                           min_value=2011, max_value=2100, value=2024, step=1)
     
     if st.sidebar.button("Generar Planilla"):
         df_grouped, global_years, df_filtered = get_filtered_data(df_base, selected_codigo_bip, selected_etapa, anio_termino)
         if df_grouped is None:
             return
         
-        # Muestra el recuadro de información del proyecto en un contenedor compacto
+        # Muestra un recuadro compacto con la información del proyecto
         nombre_proyecto = df_filtered["NOMBRE"].iloc[0] if "NOMBRE" in df_filtered.columns else "Proyecto sin nombre"
         with st.container():
             st.markdown(
@@ -264,14 +266,14 @@ def main():
         # --- Sección 1: Gasto Real no Ajustado ---
         st.markdown("### Gasto Real no Ajustado")
         st.write("Edite los valores según corresponda:")
-        # Se usa el data editor para permitir edición interactiva
         edited_original_df = st.experimental_data_editor(df_grouped, num_rows="dynamic", key="original_editor")
         original_totals_df, _ = compute_totals(edited_original_df)
         st.dataframe(original_totals_df.style.format("{:,.0f}"))
         
         # --- Sección 2: Conversión ---
         st.markdown("### Conversión a Moneda Pesos (M$)")
-        target_conversion_year = st.number_input("Convertir a año:", min_value=2011, max_value=2100, value=2024, step=1, key="conv_year")
+        target_conversion_year = st.number_input("Convertir a año:", 
+                                                   min_value=2011, max_value=2100, value=2024, step=1, key="conv_year")
         conv_df = compute_conversion_table(edited_original_df, global_years, conversion_factors, target_conversion_year)
         conv_totals_df, _ = compute_totals(conv_df)
         st.dataframe(conv_totals_df.style.format("{:,.0f}"))
@@ -283,7 +285,8 @@ def main():
         
         # --- Sección 4: Programación en Moneda Original ---
         st.markdown("### Programación en Moneda Original")
-        target_prog_year = st.number_input("Convertir a año (Programación):", min_value=1900, max_value=2100, value=2010, step=1, key="prog_year")
+        target_prog_year = st.number_input("Convertir a año (Programación):", 
+                                             min_value=1900, max_value=2100, value=2010, step=1, key="prog_year")
         prog_df = compute_programming_table(edited_original_df, global_years, conversion_factors, target_prog_year)
         if prog_df is not None:
             prog_totals_df, _ = compute_totals(prog_df)
