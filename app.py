@@ -22,7 +22,6 @@ def load_conversion_factors():
     with open("factores_conversion.csv", newline='', encoding="latin-1") as csvfile:
         reader = csv.reader(csvfile, delimiter="\t")
         headers = next(reader)
-        # Los encabezados (excepto el primero) son los años destino
         year_headers = [int(h.strip()) for h in headers[1:]]
         for row in reader:
             base_year = int(row[0].strip())
@@ -38,7 +37,6 @@ def load_conversion_factors():
 def format_currency(value, prefix="$", decimals=0):
     fmt = f"{{:,.{decimals}f}}"
     s = fmt.format(value)
-    # Reemplazamos: coma -> X, punto -> coma, X -> punto
     s = s.replace(",", "X").replace(".", ",").replace("X", ".")
     return f"{prefix} {s}" if prefix else s
 
@@ -54,12 +52,9 @@ def parse_int_currency(s):
 # ----- FORMATO NUMÉRICO PERSONALIZADO -----
 
 def format_number_custom(x):
-    """Formatea un número para que use puntos como separador de miles y coma como decimal."""
+    """Formatea un número para que se muestre sin decimales y con puntos como separador de miles."""
     try:
-        if isinstance(x, (int, float)):
-            return f"{x:,.0f}".replace(",", "X").replace(".", ",").replace("X", ".")
-        else:
-            return x
+        return f"{int(round(x)):,}".replace(",", ".")
     except Exception:
         return x
 
@@ -85,23 +80,15 @@ def append_totals(df):
 # ----- FILTRADO Y GENERACIÓN DE LA PLANILLA -----
 
 def get_filtered_data(df_base, codigo_bip, etapa, anio_termino):
-    """
-    Filtra la base de datos según el CODIGO BIP y ETAPA seleccionados.
-    Determina los años de gasto (desde el primer año con gasto > 0 hasta AÑO DE TERMINO)
-    y agrupa los datos por ITEMS.
-    """
     codigo_bip_norm = str(codigo_bip).strip().upper()
     etapa_norm = str(etapa).strip().upper()
-    
     df_filtered = df_base[
         (df_base["CODIGO BIP"].astype(str).str.strip().str.upper() == codigo_bip_norm) &
         (df_base["ETAPA"].astype(str).str.strip().str.upper() == etapa_norm)
     ]
-    
     if df_filtered.empty:
         st.error("No se encontraron datos para el CODIGO BIP y ETAPA seleccionados.")
         return None, None, None
-
     df_filtered.columns = [str(col).strip() for col in df_filtered.columns]
     expense_cols = [col for col in df_filtered.columns if col.isdigit() and 2011 <= int(col) <= 2024]
     df_grouped = df_filtered.groupby("ITEMS")[expense_cols].sum()
@@ -128,10 +115,6 @@ def get_filtered_data(df_base, codigo_bip, etapa, anio_termino):
     return df_grouped, global_years, df_filtered
 
 def compute_conversion_table(original_df, global_years, conversion_factors, target_conversion_year):
-    """
-    Calcula la tabla de Conversión: para cada celda se obtiene el factor de conversión
-    según el año base y el año destino y se realiza la transformación.
-    """
     conv_df = original_df.copy().astype(float)
     for col in conv_df.columns:
         year = int(col)
@@ -143,10 +126,6 @@ def compute_conversion_table(original_df, global_years, conversion_factors, targ
     return conv_df
 
 def compute_programming_table(original_df, global_years, conversion_factors, target_prog_year):
-    """
-    Calcula la tabla de Programación en Moneda Original.
-    Se valida que target_prog_year sea menor que el primer año de gasto.
-    """
     start_year = global_years[0]
     if target_prog_year >= start_year:
         st.error("El año de conversión para la Programación debe ser menor que el año de inicio.")
@@ -162,13 +141,6 @@ def compute_programming_table(original_df, global_years, conversion_factors, tar
     return prog_df
 
 def compute_cuadro_extra(conv_df, global_years):
-    """
-    Construye el Cuadro Extra para cada ITEM, calculando:
-      - Pagado al 31/12/2024: suma de valores de años ≤ (año actual - 1)
-      - Solicitado para el año 2025: valor del año actual (si existe)
-      - Solicitado años siguientes: suma de valores de años > año actual
-      - Costo Total: suma de los tres anteriores.
-    """
     if global_years is None or len(global_years) == 0:
         st.error("No se definieron años globales para calcular el cuadro extra.")
         return pd.DataFrame()
@@ -192,10 +164,6 @@ def compute_cuadro_extra(conv_df, global_years):
     return extra_df
 
 def export_to_excel(original_df, conv_df, extra_df, prog_df, selected_codigo_bip):
-    """
-    Exporta las 4 secciones a un archivo Excel con 4 hojas (Gasto Real, Conversión, Cuadro Extra, Programación).
-    Se incluye un título en cada hoja.
-    """
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
         original_df.to_excel(writer, sheet_name="Gasto Real", startrow=2)
