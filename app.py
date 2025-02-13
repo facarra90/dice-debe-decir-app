@@ -71,16 +71,18 @@ def get_filtered_data(df_base, codigo_bip, etapa, anio_termino):
         st.error("No se encontraron datos para el CODIGO BIP y ETAPA seleccionados.")
         return None, None, None
 
-    # Convertir todas las columnas a cadena para evitar problemas de tipeo
+    # Convertir todas las columnas a cadena para evitar problemas
     df_filtered.columns = [str(col).strip() for col in df_filtered.columns]
     
     expense_cols = [col for col in df_filtered.columns if col.isdigit() and 2011 <= int(col) <= 2024]
     df_grouped = df_filtered.groupby("ITEMS")[expense_cols].sum()
     sorted_years = sorted([int(col) for col in expense_cols])
     start_year = None
+    # Se comprueba si la columna existe antes de acceder a ella
     for y in sorted_years:
-        # Ahora las columnas son cadenas, así que usamos str(y)
-        if df_grouped[str(y)].sum() > 0:
+        col = str(y)
+        col_sum = df_grouped[col].sum() if col in df_grouped.columns else 0
+        if col_sum > 0:
             start_year = y
             break
     if start_year is None:
