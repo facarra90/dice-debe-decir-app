@@ -5,6 +5,9 @@ import io
 import csv
 from openpyxl.utils import get_column_letter
 
+# Configuración de la página para usar todo el ancho disponible
+st.set_page_config(layout="wide", page_title="Dice debe Decir - Aplicación de Gasto")
+
 # ----- FUNCIONES DE CARGA DE DATOS Y CONVERSIÓN -----
 
 @st.cache_data
@@ -232,9 +235,18 @@ def main():
         if df_grouped is None:
             return
         
-        # Título del Proyecto
+        # Título del Proyecto en un contenedor de tamaño reducido
         nombre_proyecto = df_filtered["NOMBRE"].iloc[0] if "NOMBRE" in df_filtered.columns else "Proyecto sin nombre"
-        st.subheader(f'Proyecto "{nombre_proyecto}", Etapa {selected_etapa}, Código BIP: {selected_codigo_bip}')
+        with st.container():
+            st.markdown(
+                f"""
+                <div style="padding:5px; background-color:#f0f0f0; border:1px solid #ccc; border-radius:5px; font-size:14px; margin-bottom:10px;">
+                    <b>Proyecto:</b> {nombre_proyecto} &nbsp;&nbsp;&nbsp;
+                    <b>Etapa:</b> {selected_etapa} &nbsp;&nbsp;&nbsp;
+                    <b>Código BIP:</b> {selected_codigo_bip}
+                </div>
+                """, unsafe_allow_html=True
+            )
         
         # --- Sección 1: Gasto Real no Ajustado ---
         st.markdown("### Gasto Real no Ajustado")
@@ -274,7 +286,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
-
-
-
