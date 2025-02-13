@@ -268,4 +268,20 @@ def main():
         
         # Sección 4: Programación en Moneda Original
         st.markdown("### Programación en Moneda Original")
-        target_prog_year = st.number_input("Convertir a año (Pr
+        target_prog_year = st.number_input("Convertir a año (Programación):",
+                                             min_value=1900, max_value=2100,
+                                             value=2010, step=1, key="prog_year")
+        prog_df = compute_programming_table(edited_original_df, global_years, conversion_factors, target_prog_year)
+        if prog_df is not None:
+            prog_df_totals = append_totals(prog_df)
+            st.table(style_df_contabilidad(prog_df_totals))
+        
+        st.markdown("### Exportar a Excel")
+        if st.button("Exportar a Excel"):
+            excel_data = export_to_excel(edited_original_df, conv_df, extra_df, prog_df, selected_codigo_bip)
+            st.download_button(label="Descargar Excel", data=excel_data,
+                               file_name="exported_data.xlsx",
+                               mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+if __name__ == '__main__':
+    main()
