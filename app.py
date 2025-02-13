@@ -51,10 +51,10 @@ def parse_int_currency(s):
     except:
         return 0
 
-# ----- FORMATO PERSONALIZADO PARA NÚMEROS -----
+# ----- FORMATO NUMÉRICO PERSONALIZADO -----
 
 def format_number_custom(x):
-    """Formatea un número usando punto como separador de miles y coma como decimal."""
+    """Formatea un número para que use puntos como separador de miles y coma como decimal."""
     try:
         if isinstance(x, (int, float)):
             return f"{x:,.0f}".replace(",", "X").replace(".", ",").replace("X", ".")
@@ -170,33 +170,80 @@ def compute_programming_table(original_df, global_years, conversion_factors, tar
         prog_df[col] = (prog_df[col] * factor) / 1000.0
     return prog_df
 
+def export_to_excel(original_df, conv_df, extra_df, prog_df, selected_codigo_bip):
+    """
+    Exporta las 4 secciones a un archivo Excel con 4 hojas:
+      - Gasto Real
+      - Conversión
+      - Cuadro Extra
+      - Programación (si se generó)
+    Se incluye un título en cada hoja.
+    """
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+        original_df.to_excel(writer, sheet_name="Gasto Real", startrow=2)
+        conv_df.to_excel(writer, sheet_name="Conversión", startrow=2)
+        extra_df.to_excel(writer, sheet_name="Cuadro Extra", startrow=2)
+        if prog_df is not None:
+            prog_df.to_excel(writer, sheet_name="Programación", startrow=2)
+        workbook = writer.book
+        from openpyxl.styles import Font, Alignment
+
+        title_font = Font(bold=True, size=14)
+        center_alignment = Alignment(horizontal="center")
+
+        sheets = {
+            "Gasto Real": original_df,
+            "Conversión": conv_df,
+            "Cuadro Extra": extra_df,
+            "Programación": prog_df if prog_df is not None else pd.DataFrame()
+        }
+        for sheet_name, df in sheets.items():
+            if sheet_name not in writer.sheets:
+                continue
+            worksheet = writer.sheets[sheet_name]
+            ncols = df.shape[1] + 1 if sheet_name in ["Gasto Real", "Conversión", "Programación"] else df.shape[1]
+            last_col_letter = get_column_letter(ncols)
+            worksheet.merge_cells(f"A1:{last_col_letter}1")
+            title_text = f"Proyecto: {selected_codigo_bip}"
+            cell = worksheet["A1"]
+            cell.value = title_text
+            cell.font = title_font
+            cell.alignment = center_alignment
+
+            for col in worksheet.columns:
+                max_length = 0
+                col_letter = col[0].column_letter
+                for cell in col:
+                    try:
+                        if cell.value:
+                            max_length = max(max_length, len(str(cell.value)))
+                    except:
+                        pass
+                adjusted_width = (max_length + 2)
+                worksheet.column_dimensions[col_letter].width = adjusted_width
+        writer.save()
+    return output.getvalue()
+
 # ----- INTERFAZ STREAMLIT -----
 
 def main():
     st.title("Dice debe Decir - Aplicación de Gasto")
-
-    # Carga de datos
     df_base = load_base_data()
     conversion_factors = load_conversion_factors()
     
-    # --- Panel Lateral: Selección de Filtros ---
     st.sidebar.header("Filtrar Datos")
     codigo_bip_list = sorted(df_base["CODIGO BIP"].dropna().unique().tolist())
     selected_codigo_bip = st.sidebar.selectbox("Seleccione el CODIGO BIP:", codigo_bip_list)
-    
-    # Obtener las etapas únicas de la base de datos
     etapa_list = sorted(df_base["ETAPA"].dropna().unique().tolist())
     selected_etapa = st.sidebar.selectbox("Seleccione la ETAPA:", etapa_list)
-    
-    anio_termino = st.sidebar.number_input("Ingrese el AÑO DE TERMINO del proyecto:", 
-                                           min_value=2011, max_value=2100, value=2024, step=1)
+    anio_termino = st.sidebar.number_input("Ingrese el AÑO DE TERMINO del proyecto:", min_value=2011, max_value=2100, value=2024, step=1)
     
     if st.sidebar.button("Generar Planilla"):
         df_grouped, global_years, df_filtered = get_filtered_data(df_base, selected_codigo_bip, selected_etapa, anio_termino)
         if df_grouped is None:
             return
         
-        # Muestra un recuadro compacto con la información del proyecto
         nombre_proyecto = df_filtered["NOMBRE"].iloc[0] if "NOMBRE" in df_filtered.columns else "Proyecto sin nombre"
         with st.container():
             st.markdown(
@@ -209,51 +256,42 @@ def main():
                 """, unsafe_allow_html=True
             )
         
-        # --- Sección 1: Gasto Real no Ajustado ---
+        # Sección 1: Gasto Real no Ajustado
         st.markdown("### Gasto Real no Ajustado")
         st.write("Edite los valores según corresponda:")
         if hasattr(st, "data_editor"):
             edited_original_df = st.data_editor(df_grouped, key="original_editor")
         else:
             edited_original_df = st.experimental_data_editor(df_grouped, key="original_editor")
-        # Incorporar totales (fila y columna)
         original_df_totals = append_totals(edited_original_df)
-        st.dataframe(
-            original_df_totals.style.format(format_number_custom, subset=original_df_totals.select_dtypes(include=["number"]).columns)
-        )
+        st.table(original_df_totals.style.format(format_number_custom,
+                                                  subset=original_df_totals.select_dtypes(include=["number"]).columns))
         
-        # --- Sección 2: Conversión a Moneda Pesos (M$) ---
+        # Sección 2: Conversión a Moneda Pesos (M$)
         st.markdown("### Conversión a Moneda Pesos (M$)")
-        # Valor por defecto: el año actual
-        target_conversion_year = st.number_input("Convertir a año:", 
-                                                   min_value=2011, max_value=2100, 
+        target_conversion_year = st.number_input("Convertir a año:", min_value=2011, max_value=2100, 
                                                    value=datetime.datetime.now().year, step=1, key="conv_year")
         conv_df = compute_conversion_table(edited_original_df, global_years, conversion_factors, target_conversion_year)
         conv_df_totals = append_totals(conv_df)
-        st.dataframe(
-            conv_df_totals.style.format(format_number_custom, subset=conv_df_totals.select_dtypes(include=["number"]).columns)
-        )
+        st.table(conv_df_totals.style.format(format_number_custom,
+                                              subset=conv_df_totals.select_dtypes(include=["number"]).columns))
         
-        # --- Sección 3: Cuadro Extra ---
+        # Sección 3: Cuadro Extra
         st.markdown("### Cuadro Extra")
         extra_df = compute_cuadro_extra(conv_df, global_years)
         extra_df_totals = append_totals(extra_df)
-        st.dataframe(
-            extra_df_totals.style.format(format_number_custom, subset=extra_df_totals.select_dtypes(include=["number"]).columns)
-        )
+        st.table(extra_df_totals.style.format(format_number_custom,
+                                               subset=extra_df_totals.select_dtypes(include=["number"]).columns))
         
-        # --- Sección 4: Programación en Moneda Original ---
+        # Sección 4: Programación en Moneda Original
         st.markdown("### Programación en Moneda Original")
-        target_prog_year = st.number_input("Convertir a año (Programación):", 
-                                             min_value=1900, max_value=2100, value=2010, step=1, key="prog_year")
+        target_prog_year = st.number_input("Convertir a año (Programación):", min_value=1900, max_value=2100, value=2010, step=1, key="prog_year")
         prog_df = compute_programming_table(edited_original_df, global_years, conversion_factors, target_prog_year)
         if prog_df is not None:
             prog_df_totals = append_totals(prog_df)
-            st.dataframe(
-                prog_df_totals.style.format(format_number_custom, subset=prog_df_totals.select_dtypes(include=["number"]).columns)
-            )
+            st.table(prog_df_totals.style.format(format_number_custom,
+                                                   subset=prog_df_totals.select_dtypes(include=["number"]).columns))
         
-        # --- Exportación a Excel ---
         st.markdown("### Exportar a Excel")
         if st.button("Exportar a Excel"):
             excel_data = export_to_excel(edited_original_df, conv_df, extra_df, prog_df, selected_codigo_bip)
