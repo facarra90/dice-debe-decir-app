@@ -58,10 +58,13 @@ def get_filtered_data(df_base, codigo_bip, etapa, anio_termino):
     Determina los años de gasto (desde el primer año con gasto > 0 hasta AÑO DE TERMINO)
     y agrupa los datos por ITEMS.
     """
-    # Se normalizan los datos para el filtrado
+    # Convertir a string y normalizar (esto evita problemas si alguno es None)
+    codigo_bip_norm = str(codigo_bip).strip().upper()
+    etapa_norm = str(etapa).strip().upper()
+    
     df_filtered = df_base[
-        (df_base["CODIGO BIP"].astype(str).str.strip().str.upper() == codigo_bip.strip().upper()) &
-        (df_base["ETAPA"].astype(str).str.strip().str.upper() == etapa.strip().upper())
+        (df_base["CODIGO BIP"].astype(str).str.strip().str.upper() == codigo_bip_norm) &
+        (df_base["ETAPA"].astype(str).str.strip().str.upper() == etapa_norm)
     ]
     
     if df_filtered.empty:
