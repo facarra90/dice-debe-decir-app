@@ -78,7 +78,7 @@ def get_filtered_data(df_base, codigo_bip, etapa, anio_termino):
     df_grouped = df_filtered.groupby("ITEMS")[expense_cols].sum()
     sorted_years = sorted([int(col) for col in expense_cols])
     start_year = None
-    # Se comprueba si la columna existe antes de acceder a ella
+    # Comprobar si la columna existe antes de acceder a ella
     for y in sorted_years:
         col = str(y)
         col_sum = df_grouped[col].sum() if col in df_grouped.columns else 0
@@ -268,7 +268,11 @@ def main():
         # --- Sección 1: Gasto Real no Ajustado ---
         st.markdown("### Gasto Real no Ajustado")
         st.write("Edite los valores según corresponda:")
-        edited_original_df = st.experimental_data_editor(df_grouped, num_rows="dynamic", key="original_editor")
+        # Usar data_editor o experimental_data_editor sin el parámetro num_rows
+        if hasattr(st, "data_editor"):
+            edited_original_df = st.data_editor(df_grouped, key="original_editor")
+        else:
+            edited_original_df = st.experimental_data_editor(df_grouped, key="original_editor")
         original_totals_df, _ = compute_totals(edited_original_df)
         st.dataframe(original_totals_df.style.format("{:,.0f}"))
         
