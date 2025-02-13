@@ -39,7 +39,7 @@ def load_conversion_factors():
 def format_number_custom(x):
     """
     Convierte un número a entero sin decimales y lo formatea con puntos como separador de miles.
-    Ejemplo: 9182936 se mostrará como "9.182.936" y 0 se mostrará como "0".
+    Ejemplo: 9182936 se mostrará como "9.182.936" y 0 como "0".
     """
     try:
         return f"{int(round(x)):,}".replace(",", ".")
@@ -49,11 +49,12 @@ def format_number_custom(x):
 def style_df_contabilidad(df):
     """
     Devuelve un objeto Styler que aplica el formato contable:
-      - Se formatean los números sin decimales y con puntos como separador de miles.
-      - Toda la tabla se alinea a la izquierda, incluyendo la columna "Total".
+      - Los valores numéricos se formatean sin decimales y con puntos como separador de miles.
+      - Toda la tabla se alinea a la izquierda.
     """
     styler = df.style.format(lambda x: format_number_custom(x) if isinstance(x, (int, float)) else x)
     styler = styler.set_properties(**{'text-align': 'left'})
+    # Alinear los encabezados a la izquierda
     styler = styler.set_table_styles([{'selector': 'th', 'props': [('text-align', 'left')]}])
     return styler
 
@@ -236,18 +237,18 @@ def main():
                 """, unsafe_allow_html=True
             )
         
-        # Sección 1: Gasto Real no Ajustado
+        # Sección 1: Gasto Real no Ajustado (editor interactivo)
         st.markdown("### Gasto Real no Ajustado")
         st.write("Edite los valores según corresponda:")
         if hasattr(st, "data_editor"):
             edited_original_df = st.data_editor(df_grouped, key="original_editor")
         else:
             edited_original_df = st.experimental_data_editor(df_grouped, key="original_editor")
+        
+        # Sección 1.2: Tabla con Totales (la "segunda visualización")
+        st.markdown("### Anualizacion de la Inversion")
         original_df_totals = append_totals(edited_original_df)
         st.table(style_df_contabilidad(original_df_totals))
-        
-        # Título entre la Tabla 1 y la Tabla 2
-        st.markdown("### Anualizacion de la Inversion")
         
         # Sección 2: Conversión a Moneda Pesos (M$)
         st.markdown("### Conversión a Moneda Pesos (M$)")
