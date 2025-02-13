@@ -60,20 +60,24 @@ def format_number_custom(x):
         return x
 
 def format_dataframe_numbers(df):
-    """Convierte todas las columnas numéricas del DataFrame en cadenas formateadas."""
+    """
+    Recorre todas las columnas del DataFrame.
+    Si el nombre de la columna es un dígito (o 'Total'), se convierte a número y se formatea.
+    """
     df_formatted = df.copy()
-    for col in df_formatted.select_dtypes(include=["number"]).columns:
-        df_formatted[col] = df_formatted[col].apply(lambda x: format_number_custom(x))
-    # Forzamos a que todo el DataFrame sea de tipo string para que se muestren los números formateados
+    for col in df_formatted.columns:
+        if col.isdigit() or col.lower() == "total":
+            df_formatted[col] = pd.to_numeric(df_formatted[col], errors="coerce")
+            df_formatted[col] = df_formatted[col].apply(lambda x: format_number_custom(x) if pd.notnull(x) else "")
     return df_formatted.astype(str)
 
 # ----- FUNCION PARA AGREGAR TOTALES (fila y columna) -----
 
 def append_totals(df):
     """
-    Agrega una columna "Total" que es la suma de las columnas numéricas de cada fila,
-    y añade una fila final "Total" con la suma de cada columna numérica.
-    Para las columnas no numéricas se deja vacío en la fila total.
+    Agrega una columna "Total" (suma de las columnas numéricas) a cada fila y
+    añade una fila final "Total" con la suma de cada columna numérica.
+    Las columnas no numéricas quedan vacías en la fila total.
     """
     df = df.copy()
     numeric_cols = df.select_dtypes(include=["number"]).columns
@@ -228,7 +232,7 @@ def main():
     selected_codigo_bip = st.sidebar.selectbox("Seleccione el CODIGO BIP:", codigo_bip_list)
     etapa_list = sorted(df_base["ETAPA"].dropna().unique().tolist())
     selected_etapa = st.sidebar.selectbox("Seleccione la ETAPA:", etapa_list)
-    anio_termino = st.sidebar.number_input("Ingrese el AÑO DE TERMINO del proyecto:",
+    anio_termino = st.sidebar.number_input("Ingrese el AÑO DE TERMINO del proyecto:", 
                                            min_value=2011, max_value=2100, value=2024, step=1)
     
     if st.sidebar.button("Generar Planilla"):
@@ -260,8 +264,8 @@ def main():
         
         # Sección 2: Conversión a Moneda Pesos (M$)
         st.markdown("### Conversión a Moneda Pesos (M$)")
-        target_conversion_year = st.number_input("Convertir a año:",
-                                                   min_value=2011, max_value=2100,
+        target_conversion_year = st.number_input("Convertir a año:", 
+                                                   min_value=2011, max_value=2100, 
                                                    value=datetime.datetime.now().year, step=1, key="conv_year")
         conv_df = compute_conversion_table(edited_original_df, global_years, conversion_factors, target_conversion_year)
         conv_df_totals = append_totals(conv_df)
@@ -275,7 +279,7 @@ def main():
         
         # Sección 4: Programación en Moneda Original
         st.markdown("### Programación en Moneda Original")
-        target_prog_year = st.number_input("Convertir a año (Programación):",
+        target_prog_year = st.number_input("Convertir a año (Programación):", 
                                              min_value=1900, max_value=2100, value=2010, step=1, key="prog_year")
         prog_df = compute_programming_table(edited_original_df, global_years, conversion_factors, target_prog_year)
         if prog_df is not None:
