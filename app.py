@@ -110,7 +110,8 @@ df_original = df_original.astype(int)
 
 st.markdown("**Edite los valores si es necesario:**")
 # Usamos el data editor de Streamlit para permitir edición
-edited_df = st.experimental_data_editor(df_original, num_rows="dynamic", key="original")
+edited_df = st.data_editor(df_original, num_rows="dynamic", key="original")
+
 
 # Cálculos de totales
 edited_df["Total"] = edited_df.sum(axis=1)
@@ -259,5 +260,6 @@ st.download_button(
     file_name="exported_data.xlsx",
     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 )
+
 
 
