@@ -52,8 +52,10 @@ def parse_int_currency(s):
 # ----- FORMATO NUMÉRICO PERSONALIZADO -----
 
 def format_number_custom(x):
-    """Formatea un número para que se muestre sin decimales y con puntos como separador de miles.
-       Ejemplo: 9182936 se mostrará como '9.182.936'."""
+    """
+    Convierte un número a entero sin decimales y lo formatea con puntos como separador de miles.
+    Ejemplo: 9182936 se mostrará como "9.182.936"
+    """
     try:
         return f"{int(round(x)):,}".replace(",", ".")
     except Exception:
@@ -61,18 +63,20 @@ def format_number_custom(x):
 
 def format_dataframe_numbers(df):
     """
-    Convierte las columnas numéricas del DataFrame a cadenas formateadas con la función anterior.
+    Recorre todas las columnas del DataFrame.
+    Si la columna es numérica (según pd.api.types.is_numeric_dtype), la convierte usando format_number_custom.
     """
     df_formatted = df.copy()
-    for col in df_formatted.select_dtypes(include=["number"]).columns:
-        df_formatted[col] = df_formatted[col].apply(lambda x: format_number_custom(x))
-    return df_formatted.astype(str)
+    for col in df_formatted.columns:
+        if pd.api.types.is_numeric_dtype(df_formatted[col]):
+            df_formatted[col] = df_formatted[col].apply(lambda x: format_number_custom(x) if pd.notnull(x) else "")
+    return df_formatted
 
 # ----- FUNCION PARA AGREGAR TOTALES (fila y columna) -----
 
 def append_totals(df):
     """
-    Agrega una columna "Total" (suma de las columnas numéricas) a cada fila y
+    Agrega una columna "Total" (suma de columnas numéricas) a cada fila y
     añade una fila final "Total" con la suma de cada columna numérica.
     Las columnas no numéricas quedan vacías en la fila total.
     """
@@ -268,15 +272,12 @@ def main():
         conv_df_totals = append_totals(conv_df)
         st.table(format_dataframe_numbers(conv_df_totals))
         
-        # Sección 3: Cuadro Extra (con alineación a la izquierda)
+        # Sección 3: Cuadro Extra (alineado a la izquierda, formato contable)
         st.markdown("### Cuadro Extra")
         extra_df = compute_cuadro_extra(conv_df, global_years)
         extra_df_totals = append_totals(extra_df)
-        # Aquí se aplica el formateo y se fuerza la alineación a la izquierda
-        st.table(
-            format_dataframe_numbers(extra_df_totals)
-            .style.set_properties(**{'text-align': 'left'})
-        )
+        # Se aplica el formateo y se fuerza la alineación a la izquierda
+        st.table(format_dataframe_numbers(extra_df_totals).style.set_properties(**{'text-align': 'left'}))
         
         # Sección 4: Programación en Moneda Original
         st.markdown("### Programación en Moneda Original")
