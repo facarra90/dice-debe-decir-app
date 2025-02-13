@@ -38,6 +38,7 @@ def load_conversion_factors():
 def format_currency(value, prefix="$", decimals=0):
     fmt = f"{{:,.{decimals}f}}"
     s = fmt.format(value)
+    # Reemplazamos: coma -> X, punto -> coma, X -> punto
     s = s.replace(",", "X").replace(".", ",").replace("X", ".")
     return f"{prefix} {s}" if prefix else s
 
@@ -49,6 +50,41 @@ def parse_int_currency(s):
         return int(s) if s != "" else 0
     except:
         return 0
+
+# ----- FORMATO PERSONALIZADO PARA NÚMEROS -----
+
+def format_number_custom(x):
+    """Formatea un número usando punto como separador de miles y coma como decimal."""
+    try:
+        if isinstance(x, (int, float)):
+            return f"{x:,.0f}".replace(",", "X").replace(".", ",").replace("X", ".")
+        else:
+            return x
+    except Exception:
+        return x
+
+# ----- FUNCION PARA AGREGAR TOTALES (fila y columna) -----
+
+def append_totals(df):
+    """
+    Agrega una columna "Total" que es la suma de las columnas numéricas de cada fila,
+    y añade una fila final "Total" con la suma de cada columna numérica.
+    Para las columnas no numéricas se deja vacío en la fila total.
+    """
+    df = df.copy()
+    # Identificar columnas numéricas
+    numeric_cols = df.select_dtypes(include=["number"]).columns
+    # Sumar solo sobre las columnas numéricas
+    df["Total"] = df[numeric_cols].sum(axis=1)
+    total_row = df[numeric_cols].sum(axis=0)
+    total_row["Total"] = total_row.sum()
+    # Para columnas no numéricas, dejar vacío
+    non_numeric_cols = df.columns.difference(numeric_cols)
+    for col in non_numeric_cols:
+        total_row[col] = ""
+    total_row.name = "Total"
+    df = pd.concat([df, total_row.to_frame().T])
+    return df
 
 # ----- FILTRADO Y GENERACIÓN DE LA PLANILLA -----
 
@@ -134,98 +170,6 @@ def compute_programming_table(original_df, global_years, conversion_factors, tar
         prog_df[col] = (prog_df[col] * factor) / 1000.0
     return prog_df
 
-def compute_totals(df):
-    """
-    Calcula los totales por fila y columna.
-    """
-    df_totals = df.copy()
-    df_totals['Total'] = df_totals.sum(axis=1)
-    col_totals = df_totals.sum(axis=0)
-    return df_totals, col_totals
-
-def compute_cuadro_extra(conv_df, global_years):
-    """
-    Construye el Cuadro Extra para cada ITEM, donde se calculan:
-      - Pagado al 31/12/2024: suma de valores de años ≤ (año actual - 1)
-      - Solicitado para el año 2025: valor del año actual (si existe)
-      - Solicitado años siguientes: suma de los valores de años > año actual
-      - Costo Total: suma de los tres anteriores.
-    """
-    current_year = datetime.datetime.now().year
-    extra_data = []
-    for item in conv_df.index:
-        pagado = sum(conv_df.loc[item, str(y)] for y in global_years if y <= (current_year - 1))
-        sol2025 = conv_df.loc[item, str(current_year)] if str(current_year) in conv_df.columns else 0
-        sol_siguientes = sum(conv_df.loc[item, str(y)] for y in global_years if y > current_year)
-        total = pagado + sol2025 + sol_siguientes
-        extra_data.append({
-            "Fuente": "F.N.D.R.",
-            "Asignación Presupuestaria": item,
-            "Moneda": "M$",
-            "Pagado al 31/12/2024": pagado,
-            "Solicitado para el año 2025": sol2025,
-            "Solicitado años siguientes": sol_siguientes,
-            "Costo Total": total
-        })
-    extra_df = pd.DataFrame(extra_data).set_index("Asignación Presupuestaria")
-    return extra_df
-
-def export_to_excel(original_df, conv_df, extra_df, prog_df, selected_codigo_bip):
-    """
-    Exporta las 4 secciones a un archivo Excel con 4 hojas:
-      - Gasto Real
-      - Conversión
-      - Cuadro Extra
-      - Programación (si se generó)
-    Se incluye un título en cada hoja.
-    """
-    output = io.BytesIO()
-    with pd.ExcelWriter(output, engine="openpyxl") as writer:
-        original_df.to_excel(writer, sheet_name="Gasto Real", startrow=2)
-        conv_df.to_excel(writer, sheet_name="Conversión", startrow=2)
-        extra_df.to_excel(writer, sheet_name="Cuadro Extra", startrow=2)
-        if prog_df is not None:
-            prog_df.to_excel(writer, sheet_name="Programación", startrow=2)
-        workbook = writer.book
-        from openpyxl.styles import Font, Alignment
-
-        title_font = Font(bold=True, size=14)
-        center_alignment = Alignment(horizontal="center")
-
-        sheets = {
-            "Gasto Real": original_df,
-            "Conversión": conv_df,
-            "Cuadro Extra": extra_df,
-            "Programación": prog_df if prog_df is not None else pd.DataFrame()
-        }
-        for sheet_name, df in sheets.items():
-            if sheet_name not in writer.sheets:
-                continue
-            worksheet = writer.sheets[sheet_name]
-            ncols = df.shape[1] + 1 if sheet_name in ["Gasto Real", "Conversión", "Programación"] else df.shape[1]
-            last_col_letter = get_column_letter(ncols)
-            worksheet.merge_cells(f"A1:{last_col_letter}1")
-            title_text = f"Proyecto: {selected_codigo_bip}"
-            cell = worksheet["A1"]
-            cell.value = title_text
-            cell.font = title_font
-            cell.alignment = center_alignment
-
-            # Ajustar ancho de columnas
-            for col in worksheet.columns:
-                max_length = 0
-                col_letter = col[0].column_letter
-                for cell in col:
-                    try:
-                        if cell.value:
-                            max_length = max(max_length, len(str(cell.value)))
-                    except:
-                        pass
-                adjusted_width = (max_length + 2)
-                worksheet.column_dimensions[col_letter].width = adjusted_width
-        writer.save()
-    return output.getvalue()
-
 # ----- INTERFAZ STREAMLIT -----
 
 def main():
@@ -268,35 +212,34 @@ def main():
         # --- Sección 1: Gasto Real no Ajustado ---
         st.markdown("### Gasto Real no Ajustado")
         st.write("Edite los valores según corresponda:")
-        # Usar data_editor o experimental_data_editor sin el parámetro num_rows
         if hasattr(st, "data_editor"):
             edited_original_df = st.data_editor(df_grouped, key="original_editor")
         else:
             edited_original_df = st.experimental_data_editor(df_grouped, key="original_editor")
-        original_totals_df, _ = compute_totals(edited_original_df)
-        st.dataframe(original_totals_df.style.format("{:,.0f}"))
+        # Incorporar totales (fila y columna)
+        original_df_totals = append_totals(edited_original_df)
+        st.dataframe(
+            original_df_totals.style.format(format_number_custom, subset=original_df_totals.select_dtypes(include=["number"]).columns)
+        )
         
-        # --- Sección 2: Conversión ---
+        # --- Sección 2: Conversión a Moneda Pesos (M$) ---
         st.markdown("### Conversión a Moneda Pesos (M$)")
-        # Se establece por defecto el año actual para la conversión
+        # Valor por defecto: el año actual
         target_conversion_year = st.number_input("Convertir a año:", 
                                                    min_value=2011, max_value=2100, 
                                                    value=datetime.datetime.now().year, step=1, key="conv_year")
         conv_df = compute_conversion_table(edited_original_df, global_years, conversion_factors, target_conversion_year)
-        conv_totals_df, _ = compute_totals(conv_df)
-        st.dataframe(conv_totals_df.style.format("{:,.0f}"))
+        conv_df_totals = append_totals(conv_df)
+        st.dataframe(
+            conv_df_totals.style.format(format_number_custom, subset=conv_df_totals.select_dtypes(include=["number"]).columns)
+        )
         
         # --- Sección 3: Cuadro Extra ---
         st.markdown("### Cuadro Extra")
         extra_df = compute_cuadro_extra(conv_df, global_years)
-        # Aplicar formato solo a las columnas numéricas
+        extra_df_totals = append_totals(extra_df)
         st.dataframe(
-            extra_df.style.format({
-                "Pagado al 31/12/2024": "{:,.0f}",
-                "Solicitado para el año 2025": "{:,.0f}",
-                "Solicitado años siguientes": "{:,.0f}",
-                "Costo Total": "{:,.0f}"
-            })
+            extra_df_totals.style.format(format_number_custom, subset=extra_df_totals.select_dtypes(include=["number"]).columns)
         )
         
         # --- Sección 4: Programación en Moneda Original ---
@@ -305,8 +248,10 @@ def main():
                                              min_value=1900, max_value=2100, value=2010, step=1, key="prog_year")
         prog_df = compute_programming_table(edited_original_df, global_years, conversion_factors, target_prog_year)
         if prog_df is not None:
-            prog_totals_df, _ = compute_totals(prog_df)
-            st.dataframe(prog_totals_df.style.format("{:,.0f}"))
+            prog_df_totals = append_totals(prog_df)
+            st.dataframe(
+                prog_df_totals.style.format(format_number_custom, subset=prog_df_totals.select_dtypes(include=["number"]).columns)
+            )
         
         # --- Exportación a Excel ---
         st.markdown("### Exportar a Excel")
