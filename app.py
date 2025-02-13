@@ -52,11 +52,19 @@ def parse_int_currency(s):
 # ----- FORMATO NUMÉRICO PERSONALIZADO -----
 
 def format_number_custom(x):
-    """Formatea un número para que se muestre sin decimales y con puntos como separador de miles."""
+    """Formatea un número para que se muestre sin decimales y con puntos como separador de miles.
+       Ejemplo: 9182936 se mostrará como '9.182.936'."""
     try:
         return f"{int(round(x)):,}".replace(",", ".")
     except Exception:
         return x
+
+def format_dataframe_numbers(df):
+    """Recorre cada columna numérica del DataFrame y la convierte usando format_number_custom."""
+    df_formatted = df.copy()
+    for col in df_formatted.select_dtypes(include=["number"]).columns:
+        df_formatted[col] = df_formatted[col].apply(lambda x: format_number_custom(x))
+    return df_formatted
 
 # ----- FUNCION PARA AGREGAR TOTALES (fila y columna) -----
 
@@ -247,8 +255,7 @@ def main():
         else:
             edited_original_df = st.experimental_data_editor(df_grouped, key="original_editor")
         original_df_totals = append_totals(edited_original_df)
-        st.table(original_df_totals.style.format(format_number_custom,
-                                                  subset=original_df_totals.select_dtypes(include=["number"]).columns))
+        st.table(format_dataframe_numbers(original_df_totals))
         
         # Sección 2: Conversión a Moneda Pesos (M$)
         st.markdown("### Conversión a Moneda Pesos (M$)")
@@ -257,15 +264,13 @@ def main():
                                                    value=datetime.datetime.now().year, step=1, key="conv_year")
         conv_df = compute_conversion_table(edited_original_df, global_years, conversion_factors, target_conversion_year)
         conv_df_totals = append_totals(conv_df)
-        st.table(conv_df_totals.style.format(format_number_custom,
-                                              subset=conv_df_totals.select_dtypes(include=["number"]).columns))
+        st.table(format_dataframe_numbers(conv_df_totals))
         
         # Sección 3: Cuadro Extra
         st.markdown("### Cuadro Extra")
         extra_df = compute_cuadro_extra(conv_df, global_years)
         extra_df_totals = append_totals(extra_df)
-        st.table(extra_df_totals.style.format(format_number_custom,
-                                               subset=extra_df_totals.select_dtypes(include=["number"]).columns))
+        st.table(format_dataframe_numbers(extra_df_totals))
         
         # Sección 4: Programación en Moneda Original
         st.markdown("### Programación en Moneda Original")
@@ -274,8 +279,7 @@ def main():
         prog_df = compute_programming_table(edited_original_df, global_years, conversion_factors, target_prog_year)
         if prog_df is not None:
             prog_df_totals = append_totals(prog_df)
-            st.table(prog_df_totals.style.format(format_number_custom,
-                                                   subset=prog_df_totals.select_dtypes(include=["number"]).columns))
+            st.table(format_dataframe_numbers(prog_df_totals))
         
         st.markdown("### Exportar a Excel")
         if st.button("Exportar a Excel"):
