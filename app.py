@@ -39,7 +39,7 @@ def load_conversion_factors():
 def format_number_custom(x):
     """
     Convierte un número a entero sin decimales y lo formatea con puntos como separador de miles.
-    Ejemplo: 9182936 se mostrará como "9.182.936", 0 se mostrará como "0".
+    Ejemplo: 9182936 se mostrará como "9.182.936" y 0 se mostrará como "0".
     """
     try:
         return f"{int(round(x)):,}".replace(",", ".")
@@ -50,15 +50,11 @@ def style_df_contabilidad(df):
     """
     Devuelve un objeto Styler que aplica el formato contable:
       - Los valores numéricos se formatean sin decimales y con puntos como separador de miles.
-      - Toda la tabla se alinea a la izquierda, incluida la columna "Total".
+      - Toda la tabla se alinea a la izquierda.
     """
     styler = df.style.format(lambda x: format_number_custom(x) if isinstance(x, (int, float)) else x)
-    # Forzamos la alineación a la izquierda para todas las celdas
     styler = styler.set_properties(**{'text-align': 'left'})
-    # Además, nos aseguramos de que la columna "Total" esté alineada a la izquierda
-    if "Total" in df.columns:
-        styler = styler.set_properties(subset=["Total"], **{'text-align': 'left'})
-    # Alinear los encabezados a la izquierda:
+    # Alinear los encabezados a la izquierda
     styler = styler.set_table_styles([{'selector': 'th', 'props': [('text-align', 'left')]}])
     return styler
 
@@ -66,7 +62,7 @@ def style_df_contabilidad(df):
 
 def append_totals(df):
     """
-    Agrega una columna "Total" que es la suma de las columnas numéricas de cada fila
+    Agrega una columna "Total" a cada fila (suma de las columnas numéricas)
     y añade una fila final "Total" con la suma de cada columna numérica.
     Las columnas no numéricas quedan vacías en la fila total.
     """
@@ -260,11 +256,11 @@ def main():
         conv_df_totals = append_totals(conv_df)
         st.table(style_df_contabilidad(conv_df_totals))
         
-        # Sección 3: Cuadro Extra (alineado a la izquierda, formato contable)
+        # Sección 3: Cuadro Extra (sin columna "Total")
         st.markdown("### Cuadro Extra")
         extra_df = compute_cuadro_extra(conv_df, global_years)
-        extra_df_totals = append_totals(extra_df)
-        st.table(style_df_contabilidad(extra_df_totals))
+        # Para el cuadro extra, mostramos el DataFrame sin aplicar append_totals (ya que "Costo Total" es el valor final deseado)
+        st.table(style_df_contabilidad(extra_df))
         
         # Sección 4: Programación en Moneda Original
         st.markdown("### Programación en Moneda Original")
