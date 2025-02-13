@@ -49,12 +49,13 @@ def format_number_custom(x):
 def style_df_contabilidad(df):
     """
     Devuelve un objeto Styler que aplica el formato contable:
-      - Los valores numéricos se formatean sin decimales y con puntos como separador de miles.
-      - Toda la tabla se alinea a la izquierda.
+      - Se formatean los números sin decimales y con puntos como separador de miles.
+      - Toda la tabla se alinea a la izquierda, incluyendo la columna "Total" (si existe).
     """
     styler = df.style.format(lambda x: format_number_custom(x) if isinstance(x, (int, float)) else x)
     styler = styler.set_properties(**{'text-align': 'left'})
-    # Alinear los encabezados a la izquierda
+    if "Total" in df.columns:
+        styler = styler.set_properties(subset=["Total"], **{'text-align': 'left'})
     styler = styler.set_table_styles([{'selector': 'th', 'props': [('text-align', 'left')]}])
     return styler
 
@@ -62,8 +63,8 @@ def style_df_contabilidad(df):
 
 def append_totals(df):
     """
-    Agrega una columna "Total" a cada fila (suma de las columnas numéricas)
-    y añade una fila final "Total" con la suma de cada columna numérica.
+    Agrega una columna "Total" (suma de las columnas numéricas) a cada fila y
+    añade una fila final "Total" con la suma de cada columna numérica.
     Las columnas no numéricas quedan vacías en la fila total.
     """
     df = df.copy()
@@ -259,7 +260,6 @@ def main():
         # Sección 3: Cuadro Extra (sin columna "Total")
         st.markdown("### Cuadro Extra")
         extra_df = compute_cuadro_extra(conv_df, global_years)
-        # Para el cuadro extra, mostramos el DataFrame sin aplicar append_totals (ya que "Costo Total" es el valor final deseado)
         st.table(style_df_contabilidad(extra_df))
         
         # Sección 4: Programación en Moneda Original
