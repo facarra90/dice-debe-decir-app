@@ -74,16 +74,14 @@ def get_filtered_data(df_base, codigo_bip, etapa, anio_termino):
     df_filtered.columns = [str(col).strip() for col in df_filtered.columns]
     expense_cols = [col for col in df_filtered.columns if col.isdigit() and 2011 <= int(col) <= 2024]
     df_grouped = df_filtered.groupby("ITEMS")[expense_cols].sum()
-    # Restablecer el índice para que 'ITEMS' quede como columna
-    df_grouped = df_grouped.reset_index()
+    df_grouped = df_grouped.reset_index()  # 'ITEMS' como columna
     sorted_years = sorted([int(col) for col in expense_cols])
     start_year = None
     for y in sorted_years:
         col = str(y)
-        if col in df_grouped.columns:
-            if df_grouped[col].sum() > 0:
-                start_year = y
-                break
+        if col in df_grouped.columns and df_grouped[col].sum() > 0:
+            start_year = y
+            break
     if start_year is None:
         st.error("No se encontró gasto inicial en los datos.")
         return None, None, None
@@ -92,7 +90,6 @@ def get_filtered_data(df_base, codigo_bip, etapa, anio_termino):
         return None, None, None
     global_years = list(range(start_year, anio_termino + 1))
     cols = [str(y) for y in global_years]
-    # Asegurarse de que existan todas las columnas de año (se agregan si faltan)
     for col in cols:
         if col not in df_grouped.columns:
             df_grouped[col] = 0
@@ -228,32 +225,30 @@ def main():
                 """, unsafe_allow_html=True
             )
 
-        # Usar session_state para conservar la tabla editada
-        if "edited_data" not in st.session_state:
-            st.session_state.edited_data = df_grouped.copy()
-
-        # Configurar las columnas de año para que sean numéricas
+        # Usar un único data editor para que el usuario ingrese directamente la información
+        st.markdown("### Gasto Real no Ajustado Cuadro Completo")
         col_config = {}
         for y in global_years:
             col = str(y)
             if col in df_grouped.columns:
                 col_config[col] = st.column_config.NumberColumn(min_value=0)
-
         if hasattr(st, "data_editor"):
-            edited_original_df = st.data_editor(st.session_state.edited_data, key="original_editor", column_config=col_config)
+            edited_df = st.data_editor(df_grouped, key="final_editor", column_config=col_config)
         else:
-            edited_original_df = st.experimental_data_editor(st.session_state.edited_data, key="original_editor", column_config=col_config)
-        st.session_state.edited_data = edited_original_df
+            edited_df = st.experimental_data_editor(df_grouped, key="final_editor", column_config=col_config)
+        
+        # Mostrar los totales en una sección aparte (no editable)
+        st.markdown("#### Totales")
+        totals_df = append_totals(edited_df)
+        # Se muestra sólo la última fila (la fila "Total")
+        st.table(style_df_contabilidad(totals_df.iloc[-1:].reset_index(drop=True)))
 
-        st.markdown("### Gasto Real no Ajustado Cuadro Completo")
-        original_df_totals = append_totals(edited_original_df)
-        st.table(style_df_contabilidad(original_df_totals))
-
+        # Usar edited_df para las demás secciones
         st.markdown("### Conversión a Moneda Pesos (M$)")
         target_conversion_year = st.number_input("Convertir a año:",
                                                    min_value=2011, max_value=2100,
                                                    value=datetime.datetime.now().year, step=1, key="conv_year")
-        conv_df = compute_conversion_table(edited_original_df, global_years, conversion_factors, target_conversion_year)
+        conv_df = compute_conversion_table(edited_df, global_years, conversion_factors, target_conversion_year)
         conv_df_totals = append_totals(conv_df)
         st.table(style_df_contabilidad(conv_df_totals))
 
@@ -280,14 +275,14 @@ def main():
         target_prog_year = st.number_input("Convertir a año (Programación):",
                                              min_value=1900, max_value=2100,
                                              value=2010, step=1, key="prog_year")
-        prog_df = compute_programming_table(edited_original_df, global_years, conversion_factors, target_prog_year)
+        prog_df = compute_programming_table(edited_df, global_years, conversion_factors, target_prog_year)
         if prog_df is not None:
             prog_df_totals = append_totals(prog_df)
             st.table(style_df_contabilidad(prog_df_totals))
 
         st.markdown("### Exportar a Excel")
         if st.button("Exportar a Excel"):
-            excel_data = export_to_excel(edited_original_df, conv_df, extra_df, prog_df, selected_codigo_bip)
+            excel_data = export_to_excel(edited_df, conv_df, extra_df, prog_df, selected_codigo_bip)
             st.download_button(label="Descargar Excel", data=excel_data,
                                file_name="exported_data.xlsx",
                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
