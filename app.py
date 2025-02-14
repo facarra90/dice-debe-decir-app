@@ -51,10 +51,9 @@ def style_df_contabilidad(df):
     Devuelve un objeto Styler que aplica el formato contable:
       - Se formatean los números sin decimales y con puntos como separador de miles.
       - Toda la tabla, incluidos los encabezados de columna y de fila (índice), se alinea a la izquierda.
-    Se aplica al DataFrame ya con la fila de totales.
+    Se aplica sobre el DataFrame ya con la fila de totales (cuando corresponde).
     """
     styler = df.style.format(lambda x: format_number_custom(x) if isinstance(x, (int, float)) else x)
-    # Forzar la alineación a la izquierda en todas las celdas (incluyendo encabezados y celdas de datos)
     styler = styler.set_properties(**{'text-align': 'left'})
     styler = styler.set_table_styles([
         {'selector': 'th.col_heading.level0', 'props': [('text-align', 'left')]},
@@ -64,13 +63,13 @@ def style_df_contabilidad(df):
     ])
     return styler
 
-# ----- AGREGAR TOTALES -----
+# ----- FUNCION PARA AGREGAR TOTALES -----
 
 def append_totals(df):
     """
     Agrega una columna "Total" (suma de las columnas numéricas) a cada fila y
     añade una fila final "Total" con la suma de cada columna numérica.
-    Las columnas no numéricas quedan vacías en la fila total.
+    Las columnas no numéricas quedan vacías en la fila final.
     """
     df = df.copy()
     numeric_cols = df.select_dtypes(include=["number"]).columns
@@ -251,7 +250,7 @@ def main():
         else:
             edited_original_df = st.experimental_data_editor(df_grouped, key="original_editor")
         
-        # Vista final formateada con totales (segunda visualización)
+        # Sección 1.2: Vista final con Totales (segunda visualización)
         st.markdown("### Anualizacion de la Inversion")
         original_df_totals = append_totals(edited_original_df)
         st.table(style_df_contabilidad(original_df_totals))
