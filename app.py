@@ -68,7 +68,6 @@ def validate_edited_data(df, global_years):
     if "ITEMS" not in df.columns:
         st.error("La columna 'ITEMS' es obligatoria y no puede ser eliminada.")
         return None
-    # Convertir forzosamente las columnas de año a numérico
     for y in global_years:
         col = str(y)
         if col in df.columns:
@@ -93,7 +92,7 @@ def get_filtered_data(df_base, codigo_bip, etapa, anio_termino):
         return None, None, None
     df_filtered.columns = [str(col).strip() for col in df_filtered.columns]
     expense_cols = [col for col in df_filtered.columns if col.isdigit() and 2011 <= int(col) <= 2024]
-    df_grouped = df_filtered.groupby("ITEMS")[expense_cols].sum().reset_index()  # 'ITEMS' como columna normal
+    df_grouped = df_filtered.groupby("ITEMS")[expense_cols].sum().reset_index()
     sorted_years = sorted([int(col) for col in expense_cols])
     start_year = None
     for y in sorted_years:
@@ -213,6 +212,8 @@ def export_to_excel(original_df, conv_df, extra_df, prog_df, selected_codigo_bip
         writer.save()
     return output.getvalue()
 
+# ----- FUNCIÓN PRINCIPAL CON BLOQUE try-except -----
+
 def main():
     try:
         st.title("Dice debe Decir - Aplicación de Gasto")
@@ -245,7 +246,7 @@ def main():
                 )
 
             st.markdown("### Gasto Real no Ajustado Cuadro Completo")
-            # Configurar columnas de año para que sean numéricas y bloquear la edición de "ITEMS"
+            # Configurar columnas: permitir editar solo los gastos (años) y bloquear "ITEMS"
             col_config = {}
             for y in global_years:
                 col = str(y)
@@ -262,23 +263,37 @@ def main():
             if validated_df is None:
                 return
 
-            # Limpiar caché para asegurar que se usen los datos editados
-            st.cache_data.clear()
+            st.cache_data.clear()  # Forzar actualización de caché
 
             st.markdown("#### Totales")
             totals_df = append_totals(validated_df)
             st.table(style_df_contabilidad(totals_df.iloc[-1:].reset_index(drop=True)))
 
+            # --- SECCIÓN: Conversión a Moneda Pesos (M$) EDITABLE ---
             st.markdown("### Conversión a Moneda Pesos (M$)")
             target_conversion_year = st.number_input("Convertir a año:",
                                                        min_value=2011, max_value=2100,
                                                        value=datetime.datetime.now().year, step=1, key="conv_year")
             conv_df = compute_conversion_table(validated_df, global_years, conversion_factors, target_conversion_year)
-            conv_df_totals = append_totals(conv_df)
+            # Configurar que solo se puedan editar columnas de años >= 2025; las anteriores quedan bloqueadas.
+            conv_col_config = {}
+            for y in global_years:
+                col = str(y)
+                if col in conv_df.columns:
+                    if int(y) >= 2025:
+                        conv_col_config[col] = st.column_config.NumberColumn(min_value=0)
+                    else:
+                        conv_col_config[col] = st.column_config.NumberColumn(disabled=True)
+            conv_col_config["ITEMS"] = st.column_config.TextColumn(disabled=True)
+            if hasattr(st, "data_editor"):
+                conv_edited_df = st.data_editor(conv_df, key="conv_editor", column_config=conv_col_config)
+            else:
+                conv_edited_df = st.experimental_data_editor(conv_df, key="conv_editor", column_config=conv_col_config)
+            conv_df_totals = append_totals(conv_edited_df)
             st.table(style_df_contabilidad(conv_df_totals))
 
             st.markdown("### SOLICITUD DE FINANCIAMIENTO")
-            extra_df = compute_cuadro_extra(conv_df, global_years)
+            extra_df = compute_cuadro_extra(conv_edited_df, global_years)
             totales = {
                 "Pagado al 31/12/2024": extra_df["Pagado al 31/12/2024"].sum(),
                 "Solicitado para el año 2025": extra_df["Solicitado para el año 2025"].sum(),
@@ -307,7 +322,7 @@ def main():
 
             st.markdown("### Exportar a Excel")
             if st.button("Exportar a Excel"):
-                excel_data = export_to_excel(validated_df, conv_df, extra_df, prog_df, selected_codigo_bip)
+                excel_data = export_to_excel(validated_df, conv_edited_df, extra_df, prog_df, selected_codigo_bip)
                 st.download_button(label="Descargar Excel", data=excel_data,
                                    file_name="exported_data.xlsx",
                                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
