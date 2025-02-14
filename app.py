@@ -54,7 +54,6 @@ def style_df_contabilidad(df):
     """
     styler = df.style.format(lambda x: format_number_custom(x) if isinstance(x, (int, float)) else x)
     styler = styler.set_properties(**{'text-align': 'left'})
-    # Alinear los encabezados a la izquierda
     styler = styler.set_table_styles([{'selector': 'th', 'props': [('text-align', 'left')]}])
     return styler
 
@@ -240,16 +239,16 @@ def main():
         # Sección 1: Gasto Real no Ajustado (editor interactivo)
         st.markdown("### Gasto Real no Ajustado")
         st.write("Edite los valores según corresponda:")
-        if hasattr(st, "data_editor"):
-            edited_original_df = st.data_editor(df_grouped, key="original_editor")
-        else:
-            edited_original_df = st.experimental_data_editor(df_grouped, key="original_editor")
+        edited_original_df = st.experimental_data_editor(df_grouped, key="original_editor")
         
-        # Forzamos la conversión a numérico en las columnas que representan los años
-        for y in global_years:
-            col = str(y)
-            if col in edited_original_df.columns:
-                edited_original_df[col] = pd.to_numeric(edited_original_df[col], errors="coerce").fillna(0)
+        # Forzamos la conversión a numérico para las columnas de años, controlando posibles errores
+        try:
+            for y in global_years:
+                col = str(y)
+                if col in edited_original_df.columns:
+                    edited_original_df[col] = pd.to_numeric(edited_original_df[col], errors="coerce").fillna(0)
+        except Exception as e:
+            st.error(f"Error al convertir la columna {col}: {e}")
         
         # Sección 1.2: Tabla con Totales (segunda visualización)
         st.markdown("### Gasto Real no Ajustado Cuadro Completo")
@@ -285,7 +284,6 @@ def main():
             "Costo Total": [totales["Costo Total"]]
         }, index=["Total"])
         extra_df = pd.concat([extra_df, totals_row])
-        
         st.table(style_df_contabilidad(extra_df))
         
         # Sección 4: Programación en Moneda Original
