@@ -48,14 +48,15 @@ def format_number_custom(x):
 
 def style_df_contabilidad(df):
     """
-    Devuelve un objeto Styler que aplica el formato contable:
-      - Los valores numéricos se formatean sin decimales y con puntos como separador de miles.
-      - Toda la tabla se alinea a la izquierda, incluidos los encabezados de columna y de fila (índice).
+    Aplica el formato contable a un DataFrame:
+      - Se formatean los números sin decimales y con puntos como separador de miles.
+      - Se fuerza la alineación a la izquierda en todas las celdas y encabezados, incluyendo el índice (donde aparece "Total").
+    Se aplica al DataFrame YA con la fila de totales.
     """
     styler = df.style.format(lambda x: format_number_custom(x) if isinstance(x, (int, float)) else x)
-    # Alineamos todas las celdas a la izquierda
+    # Alinear todas las celdas a la izquierda
     styler = styler.set_properties(**{'text-align': 'left'})
-    # Forzamos la alineación a la izquierda en los encabezados de columna y de fila
+    # Forzar alineación a la izquierda en encabezados de columna y fila
     styler = styler.set_table_styles([
         {'selector': 'th.col_heading.level0', 'props': [('text-align', 'left')]},
         {'selector': 'th.row_heading', 'props': [('text-align', 'left')]},
@@ -63,13 +64,13 @@ def style_df_contabilidad(df):
     ])
     return styler
 
-# ----- FUNCION PARA AGREGAR TOTALES -----
+# ----- AGREGAR TOTALES -----
 
 def append_totals(df):
     """
     Agrega una columna "Total" (suma de las columnas numéricas) a cada fila y
     añade una fila final "Total" con la suma de cada columna numérica.
-    Las columnas no numéricas quedan vacías en la fila total.
+    Se aplica sobre el DataFrame y luego se formatea.
     """
     df = df.copy()
     numeric_cols = df.select_dtypes(include=["number"]).columns
@@ -242,7 +243,7 @@ def main():
                 """, unsafe_allow_html=True
             )
         
-        # Sección 1: Gasto Real no Ajustado (editor interactivo)
+        # Sección 1: Gasto Real no Ajustado (vista editable)
         st.markdown("### Gasto Real no Ajustado")
         st.write("Edite los valores según corresponda:")
         if hasattr(st, "data_editor"):
@@ -250,7 +251,7 @@ def main():
         else:
             edited_original_df = st.experimental_data_editor(df_grouped, key="original_editor")
         
-        # Sección 1.2: Tabla con Totales (segunda visualización) con título
+        # Vista final formateada (después de agregar totales)
         st.markdown("### Anualizacion de la Inversion")
         original_df_totals = append_totals(edited_original_df)
         st.table(style_df_contabilidad(original_df_totals))
