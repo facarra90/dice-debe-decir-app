@@ -237,37 +237,29 @@ def main():
                 """, unsafe_allow_html=True
             )
         
-        # --- Sección combinada: Modo Edición / Visualización (un único widget) ---
-        st.markdown("### Gasto Real con Totales")
-        # Inicializa la variable de estado si aún no existe
-        if 'edit_mode' not in st.session_state:
-            st.session_state.edit_mode = True
-
-        if st.session_state.edit_mode:
-            st.write("Edite los valores:")
-            if hasattr(st, "data_editor"):
-                edited_original_df = st.data_editor(df_grouped, key="original_editor")
-            else:
-                edited_original_df = st.experimental_data_editor(df_grouped, key="original_editor")
-            if st.button("Ver Totales"):
-                st.session_state.edit_mode = False
-                st.session_state.edited_df = edited_original_df
+        # Sección 1: Gasto Real no Ajustado (editor interactivo)
+        st.markdown("### Gasto Real no Ajustado")
+        st.write("Edite los valores según corresponda:")
+        if hasattr(st, "data_editor"):
+            edited_original_df = st.data_editor(df_grouped, key="original_editor")
         else:
-            combined_df = append_totals(st.session_state.edited_df)
-            st.table(style_df_contabilidad(combined_df))
-            if st.button("Editar nuevamente"):
-                st.session_state.edit_mode = True
+            edited_original_df = st.experimental_data_editor(df_grouped, key="original_editor")
+        
+        # Sección 1.2: Tabla con Totales (segunda visualización)
+        st.markdown("### Gasto Real no Ajustado Cuadro Completo")
+        original_df_totals = append_totals(edited_original_df)
+        st.table(style_df_contabilidad(original_df_totals))
         
         # Sección 2: Conversión a Moneda Pesos (M$)
         st.markdown("### Conversión a Moneda Pesos (M$)")
         target_conversion_year = st.number_input("Convertir a año:",
                                                    min_value=2011, max_value=2100,
                                                    value=datetime.datetime.now().year, step=1, key="conv_year")
-        conv_df = compute_conversion_table(st.session_state.edited_df, global_years, conversion_factors, target_conversion_year)
+        conv_df = compute_conversion_table(edited_original_df, global_years, conversion_factors, target_conversion_year)
         conv_df_totals = append_totals(conv_df)
         st.table(style_df_contabilidad(conv_df_totals))
         
-        # Sección 3: Cuadro Extra
+        # Sección 3: Cuadro Extra (sin columna "Total")
         st.markdown("### Cuadro Extra")
         extra_df = compute_cuadro_extra(conv_df, global_years)
         st.table(style_df_contabilidad(extra_df))
@@ -277,14 +269,14 @@ def main():
         target_prog_year = st.number_input("Convertir a año (Programación):",
                                              min_value=1900, max_value=2100,
                                              value=2010, step=1, key="prog_year")
-        prog_df = compute_programming_table(st.session_state.edited_df, global_years, conversion_factors, target_prog_year)
+        prog_df = compute_programming_table(edited_original_df, global_years, conversion_factors, target_prog_year)
         if prog_df is not None:
             prog_df_totals = append_totals(prog_df)
             st.table(style_df_contabilidad(prog_df_totals))
         
         st.markdown("### Exportar a Excel")
         if st.button("Exportar a Excel"):
-            excel_data = export_to_excel(st.session_state.edited_df, conv_df, extra_df, prog_df, selected_codigo_bip)
+            excel_data = export_to_excel(edited_original_df, conv_df, extra_df, prog_df, selected_codigo_bip)
             st.download_button(label="Descargar Excel", data=excel_data,
                                file_name="exported_data.xlsx",
                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
