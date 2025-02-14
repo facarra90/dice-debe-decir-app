@@ -111,6 +111,9 @@ def get_filtered_data(df_base, codigo_bip, etapa, anio_termino):
         if col not in df_grouped.columns:
             df_grouped[col] = 0
     df_grouped = df_grouped[cols].sort_index()
+    # Convertir todas las columnas de años a numérico
+    for col in df_grouped.columns:
+        df_grouped[col] = pd.to_numeric(df_grouped[col], errors="coerce").fillna(0)
     return df_grouped, global_years, df_filtered
 
 def compute_conversion_table(original_df, global_years, conversion_factors, target_conversion_year):
@@ -240,7 +243,7 @@ def main():
         st.markdown("### Gasto Real no Ajustado")
         st.write("Edite los valores según corresponda:")
 
-        # Definir la configuración de las columnas para que cada columna de año sea numérica.
+        # Definir la configuración para que cada columna de año se maneje como numérica
         col_config = {}
         for y in global_years:
             col = str(y)
@@ -269,7 +272,6 @@ def main():
         # Sección 3: SOLICITUD DE FINANCIAMIENTO
         st.markdown("### SOLICITUD DE FINANCIAMIENTO")
         extra_df = compute_cuadro_extra(conv_df, global_years)
-        # Agregar fila de totales para las columnas específicas
         totales = {
             "Pagado al 31/12/2024": extra_df["Pagado al 31/12/2024"].sum(),
             "Solicitado para el año 2025": extra_df["Solicitado para el año 2025"].sum(),
