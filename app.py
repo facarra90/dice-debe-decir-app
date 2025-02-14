@@ -59,6 +59,24 @@ def append_totals(df):
     df = pd.concat([df, total_row.to_frame().T])
     return df
 
+# ----- VALIDACIÓN DE DATOS EDITADOS -----
+
+def validate_edited_data(df, global_years):
+    # Verificar que la columna "ITEMS" exista y no se haya editado
+    if "ITEMS" not in df.columns:
+        st.error("La columna 'ITEMS' es obligatoria y no puede ser eliminada.")
+        return None
+    # Forzar la conversión a numérico de las columnas de año
+    for y in global_years:
+        col = str(y)
+        if col in df.columns:
+            try:
+                df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+            except Exception as e:
+                st.error(f"Error al convertir la columna {col}: {e}")
+                return None
+    return df
+
 # ----- FILTRADO Y PREPARACIÓN DE DATOS -----
 
 def get_filtered_data(df_base, codigo_bip, etapa, anio_termino):
@@ -73,8 +91,7 @@ def get_filtered_data(df_base, codigo_bip, etapa, anio_termino):
         return None, None, None
     df_filtered.columns = [str(col).strip() for col in df_filtered.columns]
     expense_cols = [col for col in df_filtered.columns if col.isdigit() and 2011 <= int(col) <= 2024]
-    df_grouped = df_filtered.groupby("ITEMS")[expense_cols].sum()
-    df_grouped = df_grouped.reset_index()  # 'ITEMS' como columna normal
+    df_grouped = df_filtered.groupby("ITEMS")[expense_cols].sum().reset_index()  # 'ITEMS' como columna
     sorted_years = sorted([int(col) for col in expense_cols])
     start_year = None
     for y in sorted_years:
@@ -95,7 +112,7 @@ def get_filtered_data(df_base, codigo_bip, etapa, anio_termino):
             df_grouped[col] = 0
     df_grouped = df_grouped[["ITEMS"] + cols].sort_values("ITEMS")
     for col in df_grouped.columns:
-        if str(col).isdigit():
+        if col.isdigit():
             df_grouped[col] = pd.to_numeric(df_grouped[col], errors="coerce").fillna(0)
     return df_grouped, global_years, df_filtered
 
@@ -104,10 +121,9 @@ def get_filtered_data(df_base, codigo_bip, etapa, anio_termino):
 def compute_conversion_table(original_df, global_years, conversion_factors, target_conversion_year):
     conv_df = original_df.copy()
     for col in conv_df.columns:
-        col_str = str(col)
-        if col_str.isdigit():
+        if str(col).isdigit():
             conv_df[col] = pd.to_numeric(conv_df[col], errors="coerce").fillna(0).astype(float)
-            year = int(col_str)
+            year = int(col)
             base_key = year if year in conversion_factors else max(conversion_factors.keys())
             available_years = sorted(conversion_factors[base_key].keys())
             target_year_use = target_conversion_year if target_conversion_year <= available_years[-1] else available_years[-1]
@@ -118,10 +134,9 @@ def compute_conversion_table(original_df, global_years, conversion_factors, targ
 def compute_programming_table(original_df, global_years, conversion_factors, target_prog_year):
     prog_df = original_df.copy()
     for col in prog_df.columns:
-        col_str = str(col)
-        if col_str.isdigit():
+        if str(col).isdigit():
             prog_df[col] = pd.to_numeric(prog_df[col], errors="coerce").fillna(0).astype(float)
-            year = int(col_str)
+            year = int(col)
             base_key = year if year in conversion_factors else max(conversion_factors.keys())
             available_years = sorted(conversion_factors[base_key].keys())
             target_use = available_years[0] if target_prog_year < available_years[0] else target_prog_year
@@ -237,16 +252,21 @@ def main():
             edited_df = st.data_editor(df_grouped, key="final_editor", column_config=col_config)
         else:
             edited_df = st.experimental_data_editor(df_grouped, key="final_editor", column_config=col_config)
-        
+
+        # Validar datos ingresados: forzamos conversión de columnas de año y verificamos ITEMS
+        validated_df = validate_edited_data(edited_df, global_years)
+        if validated_df is None:
+            return
+
         st.markdown("#### Totales")
-        totals_df = append_totals(edited_df)
+        totals_df = append_totals(validated_df)
         st.table(style_df_contabilidad(totals_df.iloc[-1:].reset_index(drop=True)))
 
         st.markdown("### Conversión a Moneda Pesos (M$)")
         target_conversion_year = st.number_input("Convertir a año:",
                                                    min_value=2011, max_value=2100,
                                                    value=datetime.datetime.now().year, step=1, key="conv_year")
-        conv_df = compute_conversion_table(edited_df, global_years, conversion_factors, target_conversion_year)
+        conv_df = compute_conversion_table(validated_df, global_years, conversion_factors, target_conversion_year)
         conv_df_totals = append_totals(conv_df)
         st.table(style_df_contabilidad(conv_df_totals))
 
@@ -273,14 +293,14 @@ def main():
         target_prog_year = st.number_input("Convertir a año (Programación):",
                                              min_value=1900, max_value=2100,
                                              value=2010, step=1, key="prog_year")
-        prog_df = compute_programming_table(edited_df, global_years, conversion_factors, target_prog_year)
+        prog_df = compute_programming_table(validated_df, global_years, conversion_factors, target_prog_year)
         if prog_df is not None:
             prog_df_totals = append_totals(prog_df)
             st.table(style_df_contabilidad(prog_df_totals))
 
         st.markdown("### Exportar a Excel")
         if st.button("Exportar a Excel"):
-            excel_data = export_to_excel(edited_df, conv_df, extra_df, prog_df, selected_codigo_bip)
+            excel_data = export_to_excel(validated_df, conv_df, extra_df, prog_df, selected_codigo_bip)
             st.download_button(label="Descargar Excel", data=excel_data,
                                file_name="exported_data.xlsx",
                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
