@@ -245,6 +245,12 @@ def main():
         else:
             edited_original_df = st.experimental_data_editor(df_grouped, key="original_editor")
         
+        # Forzamos la conversión a numérico en las columnas que representan los años
+        for y in global_years:
+            col = str(y)
+            if col in edited_original_df.columns:
+                edited_original_df[col] = pd.to_numeric(edited_original_df[col], errors="coerce").fillna(0)
+        
         # Sección 1.2: Tabla con Totales (segunda visualización)
         st.markdown("### Gasto Real no Ajustado Cuadro Completo")
         original_df_totals = append_totals(edited_original_df)
