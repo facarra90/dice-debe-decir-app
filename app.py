@@ -74,7 +74,7 @@ def get_filtered_data(df_base, codigo_bip, etapa, anio_termino):
     df_filtered.columns = [str(col).strip() for col in df_filtered.columns]
     expense_cols = [col for col in df_filtered.columns if col.isdigit() and 2011 <= int(col) <= 2024]
     df_grouped = df_filtered.groupby("ITEMS")[expense_cols].sum()
-    df_grouped = df_grouped.reset_index()  # 'ITEMS' como columna
+    df_grouped = df_grouped.reset_index()  # 'ITEMS' como columna normal
     sorted_years = sorted([int(col) for col in expense_cols])
     start_year = None
     for y in sorted_years:
@@ -94,16 +94,20 @@ def get_filtered_data(df_base, codigo_bip, etapa, anio_termino):
         if col not in df_grouped.columns:
             df_grouped[col] = 0
     df_grouped = df_grouped[["ITEMS"] + cols].sort_values("ITEMS")
-    # Convertir solo las columnas de año a numérico
+    # Convertir solo las columnas cuyos nombres son dígitos a numérico
     for col in df_grouped.columns:
         if col.isdigit():
             df_grouped[col] = pd.to_numeric(df_grouped[col], errors="coerce").fillna(0)
     return df_grouped, global_years, df_filtered
 
+# ----- FUNCIONES DE CONVERSIÓN -----
+
 def compute_conversion_table(original_df, global_years, conversion_factors, target_conversion_year):
-    conv_df = original_df.copy().astype(float)
+    conv_df = original_df.copy()
     for col in conv_df.columns:
         if col.isdigit():
+            # Convertir a numérico si no lo es
+            conv_df[col] = pd.to_numeric(conv_df[col], errors="coerce").fillna(0).astype(float)
             year = int(col)
             base_key = year if year in conversion_factors else max(conversion_factors.keys())
             available_years = sorted(conversion_factors[base_key].keys())
@@ -113,13 +117,10 @@ def compute_conversion_table(original_df, global_years, conversion_factors, targ
     return conv_df
 
 def compute_programming_table(original_df, global_years, conversion_factors, target_prog_year):
-    start_year = global_years[0]
-    if target_prog_year >= start_year:
-        st.error("El año de conversión para la Programación debe ser menor que el año de inicio.")
-        return None
-    prog_df = original_df.copy().astype(float)
+    prog_df = original_df.copy()
     for col in prog_df.columns:
         if col.isdigit():
+            prog_df[col] = pd.to_numeric(prog_df[col], errors="coerce").fillna(0).astype(float)
             year = int(col)
             base_key = year if year in conversion_factors else max(conversion_factors.keys())
             available_years = sorted(conversion_factors[base_key].keys())
@@ -129,7 +130,7 @@ def compute_programming_table(original_df, global_years, conversion_factors, tar
     return prog_df
 
 def compute_cuadro_extra(conv_df, global_years):
-    if global_years is None or len(global_years) == 0:
+    if not global_years:
         st.error("No se definieron años globales para calcular el cuadro extra.")
         return pd.DataFrame()
     current_year = datetime.datetime.now().year
@@ -225,25 +226,26 @@ def main():
                 """, unsafe_allow_html=True
             )
 
-        # Usar un único data editor para que el usuario ingrese directamente la información
+        # Permitir que el usuario edite directamente la tabla "Gasto Real no Ajustado Cuadro Completo"
         st.markdown("### Gasto Real no Ajustado Cuadro Completo")
+        # Configurar columnas para que sean numéricas (solo para las columnas de año)
         col_config = {}
         for y in global_years:
             col = str(y)
             if col in df_grouped.columns:
                 col_config[col] = st.column_config.NumberColumn(min_value=0)
+        # Data editor para la tabla completa
         if hasattr(st, "data_editor"):
             edited_df = st.data_editor(df_grouped, key="final_editor", column_config=col_config)
         else:
             edited_df = st.experimental_data_editor(df_grouped, key="final_editor", column_config=col_config)
         
-        # Mostrar los totales en una sección aparte (no editable)
+        # Mostrar totales en una sección aparte (solo la fila "Total")
         st.markdown("#### Totales")
         totals_df = append_totals(edited_df)
-        # Se muestra sólo la última fila (la fila "Total")
         st.table(style_df_contabilidad(totals_df.iloc[-1:].reset_index(drop=True)))
 
-        # Usar edited_df para las demás secciones
+        # Usar edited_df para las demás conversiones
         st.markdown("### Conversión a Moneda Pesos (M$)")
         target_conversion_year = st.number_input("Convertir a año:",
                                                    min_value=2011, max_value=2100,
