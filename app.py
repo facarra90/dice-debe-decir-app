@@ -237,18 +237,16 @@ def main():
                 """, unsafe_allow_html=True
             )
         
-        # Sección 1: Gasto Real no Ajustado (editor interactivo)
-        st.markdown("### Gasto Real no Ajustado")
-        st.write("Edite los valores según corresponda:")
+        # Sección combinada: Gasto Real con Totales
+        st.markdown("### Gasto Real con Totales")
+        st.write("Edite los valores y vea automáticamente la suma total en la fila inferior:")
         if hasattr(st, "data_editor"):
             edited_original_df = st.data_editor(df_grouped, key="original_editor")
         else:
             edited_original_df = st.experimental_data_editor(df_grouped, key="original_editor")
         
-        # Sección 1.2: Tabla con Totales (la "segunda visualización")
-        st.markdown("### Anualizacion de la Inversion")
-        original_df_totals = append_totals(edited_original_df)
-        st.table(style_df_contabilidad(original_df_totals))
+        combined_df = append_totals(edited_original_df)
+        st.table(style_df_contabilidad(combined_df))
         
         # Sección 2: Conversión a Moneda Pesos (M$)
         st.markdown("### Conversión a Moneda Pesos (M$)")
@@ -259,7 +257,7 @@ def main():
         conv_df_totals = append_totals(conv_df)
         st.table(style_df_contabilidad(conv_df_totals))
         
-        # Sección 3: Cuadro Extra (sin columna "Total")
+        # Sección 3: Cuadro Extra
         st.markdown("### Cuadro Extra")
         extra_df = compute_cuadro_extra(conv_df, global_years)
         st.table(style_df_contabilidad(extra_df))
