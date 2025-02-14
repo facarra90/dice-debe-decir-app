@@ -239,21 +239,24 @@ def main():
                 """, unsafe_allow_html=True
             )
         
-        # Sección 1: Gasto Real no Ajustado (editor interactivo)
-        st.markdown("### Gasto Real no Ajustado")
-        st.write("Edite los valores según corresponda:")
-
-        # Definir la configuración para que cada columna de año se maneje como numérica
+        # Usar session_state para almacenar la tabla editada y conservar los cambios
+        if "edited_data" not in st.session_state:
+            st.session_state.edited_data = df_grouped.copy()
+        
+        # Definir la configuración para que cada columna de año se maneje como numérica.
         col_config = {}
         for y in global_years:
             col = str(y)
             if col in df_grouped.columns:
                 col_config[col] = st.column_config.NumberColumn(min_value=0)
-
+        
         if hasattr(st, "data_editor"):
-            edited_original_df = st.data_editor(df_grouped, key="original_editor", column_config=col_config)
+            edited_original_df = st.data_editor(st.session_state.edited_data, key="original_editor", column_config=col_config)
         else:
-            edited_original_df = st.experimental_data_editor(df_grouped, key="original_editor", column_config=col_config)
+            edited_original_df = st.experimental_data_editor(st.session_state.edited_data, key="original_editor", column_config=col_config)
+        
+        # Guardar en session_state para mantener los cambios entre re-ejecuciones
+        st.session_state.edited_data = edited_original_df
         
         # Sección 1.2: Mostrar la tabla con totales (Gasto Real no Ajustado Cuadro Completo)
         st.markdown("### Gasto Real no Ajustado Cuadro Completo")
