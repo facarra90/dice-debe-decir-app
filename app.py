@@ -239,7 +239,14 @@ def main():
         # Sección 1: Gasto Real no Ajustado (editor interactivo)
         st.markdown("### Gasto Real no Ajustado")
         st.write("Edite los valores según corresponda:")
-        edited_original_df = st.experimental_data_editor(df_grouped, key="original_editor")
+        
+
+        if hasattr(st, "data_editor"):
+            edited_original_df = st.data_editor(df_grouped, key="original_editor")
+        else:
+            edited_original_df = st.experimental_data_editor(df_grouped, key="original_editor")
+
+        
         
         # Forzamos la conversión a numérico para las columnas de años, controlando posibles errores
         try:
