@@ -260,8 +260,26 @@ def main():
         st.table(style_df_contabilidad(conv_df_totals))
         
         # Sección 3: SOLICITUD DE FINANCIAMIENTO
-        st.markdown("### Solicitud de Financiamiento")
+        st.markdown("### SOLICITUD DE FINANCIAMIENTO")
         extra_df = compute_cuadro_extra(conv_df, global_years)
+        
+        # Agregar fila de totales para las columnas específicas
+        totales = {
+            "Pagado al 31/12/2024": extra_df["Pagado al 31/12/2024"].sum(),
+            "Solicitado para el año 2025": extra_df["Solicitado para el año 2025"].sum(),
+            "Solicitado años siguientes": extra_df["Solicitado años siguientes"].sum(),
+            "Costo Total": extra_df["Costo Total"].sum()
+        }
+        totals_row = pd.DataFrame({
+            "Fuente": [""],
+            "Moneda": [""],
+            "Pagado al 31/12/2024": [totales["Pagado al 31/12/2024"]],
+            "Solicitado para el año 2025": [totales["Solicitado para el año 2025"]],
+            "Solicitado años siguientes": [totales["Solicitado años siguientes"]],
+            "Costo Total": [totales["Costo Total"]]
+        }, index=["Total"])
+        extra_df = pd.concat([extra_df, totals_row])
+        
         st.table(style_df_contabilidad(extra_df))
         
         # Sección 4: Programación en Moneda Original
