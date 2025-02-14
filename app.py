@@ -260,7 +260,7 @@ def main():
         st.table(style_df_contabilidad(conv_df_totals))
         
         # Sección 3: SOLICITUD DE FINANCIAMIENTO
-        st.markdown("### SOLICITUD DE FINANCIAMIENTO")
+        st.markdown("### Solicitud de Financiamiento")
         extra_df = compute_cuadro_extra(conv_df, global_years)
         st.table(style_df_contabilidad(extra_df))
         
