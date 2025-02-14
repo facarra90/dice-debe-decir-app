@@ -5,17 +5,19 @@ import io
 import csv
 from openpyxl.utils import get_column_letter
 
-# Configuración de la página
+# Configuración de la página para usar todo el ancho disponible
 st.set_page_config(layout="wide", page_title="Dice debe Decir - Aplicación de Gasto")
 
 # ----- FUNCIONES DE CARGA DE DATOS -----
 
 @st.cache_data
 def load_base_data():
+    """Carga la base de datos desde el archivo Excel."""
     return pd.read_excel("BASE DE DATOS.xlsx")
 
 @st.cache_data
 def load_conversion_factors():
+    """Carga los factores de conversión desde el archivo CSV."""
     conversion = {}
     with open("factores_conversion.csv", newline='', encoding="latin-1") as csvfile:
         reader = csv.reader(csvfile, delimiter="\t")
@@ -35,6 +37,10 @@ def load_conversion_factors():
 # ----- FORMATO NUMÉRICO PERSONALIZADO -----
 
 def format_number_custom(x):
+    """
+    Convierte un número a entero sin decimales y lo formatea con puntos como separador de miles.
+    Ejemplo: 9182936 se mostrará como "9.182.936" y 0 se mostrará como "0".
+    """
     try:
         return f"{int(round(x)):,}".replace(",", ".")
     except Exception:
@@ -44,21 +50,27 @@ def style_df_contabilidad(df):
     """
     Devuelve un objeto Styler que aplica el formato contable:
       - Los valores numéricos se formatean sin decimales y con puntos como separador de miles.
-      - Toda la tabla, incluidos los encabezados de fila (índice), se alinea a la izquierda.
+      - Toda la tabla se alinea a la izquierda, incluidos los encabezados de columna y de fila (índice).
     """
     styler = df.style.format(lambda x: format_number_custom(x) if isinstance(x, (int, float)) else x)
+    # Alineamos todas las celdas a la izquierda
     styler = styler.set_properties(**{'text-align': 'left'})
-    styler = styler.set_table_styles(
-        [
-            {'selector': 'th', 'props': [('text-align', 'left')]},
-            {'selector': '.row_heading, .blank', 'props': [('text-align', 'left')]}
-        ]
-    )
+    # Forzamos la alineación a la izquierda en los encabezados de columna y de fila
+    styler = styler.set_table_styles([
+        {'selector': 'th.col_heading.level0', 'props': [('text-align', 'left')]},
+        {'selector': 'th.row_heading', 'props': [('text-align', 'left')]},
+        {'selector': 'th.index_name', 'props': [('text-align', 'left')]}
+    ])
     return styler
 
 # ----- FUNCION PARA AGREGAR TOTALES -----
 
 def append_totals(df):
+    """
+    Agrega una columna "Total" (suma de las columnas numéricas) a cada fila y
+    añade una fila final "Total" con la suma de cada columna numérica.
+    Las columnas no numéricas quedan vacías en la fila total.
+    """
     df = df.copy()
     numeric_cols = df.select_dtypes(include=["number"]).columns
     df["Total"] = df[numeric_cols].sum(axis=1)
