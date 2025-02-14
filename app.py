@@ -94,9 +94,8 @@ def get_filtered_data(df_base, codigo_bip, etapa, anio_termino):
         if col not in df_grouped.columns:
             df_grouped[col] = 0
     df_grouped = df_grouped[["ITEMS"] + cols].sort_values("ITEMS")
-    # Convertir solo las columnas cuyos nombres son dígitos a numérico
     for col in df_grouped.columns:
-        if col.isdigit():
+        if str(col).isdigit():
             df_grouped[col] = pd.to_numeric(df_grouped[col], errors="coerce").fillna(0)
     return df_grouped, global_years, df_filtered
 
@@ -105,27 +104,28 @@ def get_filtered_data(df_base, codigo_bip, etapa, anio_termino):
 def compute_conversion_table(original_df, global_years, conversion_factors, target_conversion_year):
     conv_df = original_df.copy()
     for col in conv_df.columns:
-        if col.isdigit():
-            # Convertir a numérico si no lo es
+        col_str = str(col)
+        if col_str.isdigit():
             conv_df[col] = pd.to_numeric(conv_df[col], errors="coerce").fillna(0).astype(float)
-            year = int(col)
+            year = int(col_str)
             base_key = year if year in conversion_factors else max(conversion_factors.keys())
             available_years = sorted(conversion_factors[base_key].keys())
             target_year_use = target_conversion_year if target_conversion_year <= available_years[-1] else available_years[-1]
-            factor = conversion_factors[base_key][target_year_use]
+            factor = conversion_factors[base_key].get(target_year_use, 1)
             conv_df[col] = (conv_df[col] * factor) / 1000.0
     return conv_df
 
 def compute_programming_table(original_df, global_years, conversion_factors, target_prog_year):
     prog_df = original_df.copy()
     for col in prog_df.columns:
-        if col.isdigit():
+        col_str = str(col)
+        if col_str.isdigit():
             prog_df[col] = pd.to_numeric(prog_df[col], errors="coerce").fillna(0).astype(float)
-            year = int(col)
+            year = int(col_str)
             base_key = year if year in conversion_factors else max(conversion_factors.keys())
             available_years = sorted(conversion_factors[base_key].keys())
             target_use = available_years[0] if target_prog_year < available_years[0] else target_prog_year
-            factor = conversion_factors[base_key][target_use]
+            factor = conversion_factors[base_key].get(target_use, 1)
             prog_df[col] = (prog_df[col] * factor) / 1000.0
     return prog_df
 
@@ -226,26 +226,22 @@ def main():
                 """, unsafe_allow_html=True
             )
 
-        # Permitir que el usuario edite directamente la tabla "Gasto Real no Ajustado Cuadro Completo"
         st.markdown("### Gasto Real no Ajustado Cuadro Completo")
-        # Configurar columnas para que sean numéricas (solo para las columnas de año)
+        # Configurar las columnas de año para que sean numéricas
         col_config = {}
         for y in global_years:
             col = str(y)
             if col in df_grouped.columns:
                 col_config[col] = st.column_config.NumberColumn(min_value=0)
-        # Data editor para la tabla completa
         if hasattr(st, "data_editor"):
             edited_df = st.data_editor(df_grouped, key="final_editor", column_config=col_config)
         else:
             edited_df = st.experimental_data_editor(df_grouped, key="final_editor", column_config=col_config)
         
-        # Mostrar totales en una sección aparte (solo la fila "Total")
         st.markdown("#### Totales")
         totals_df = append_totals(edited_df)
         st.table(style_df_contabilidad(totals_df.iloc[-1:].reset_index(drop=True)))
 
-        # Usar edited_df para las demás conversiones
         st.markdown("### Conversión a Moneda Pesos (M$)")
         target_conversion_year = st.number_input("Convertir a año:",
                                                    min_value=2011, max_value=2100,
