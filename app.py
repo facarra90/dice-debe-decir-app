@@ -168,7 +168,7 @@ def export_to_excel(original_df, conv_df, extra_df, prog_df, selected_codigo_bip
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
         original_df.to_excel(writer, sheet_name="Gasto Real", startrow=2)
         conv_df.to_excel(writer, sheet_name="Conversión", startrow=2)
-        extra_df.to_excel(writer, sheet_name="Cuadro Extra", startrow=2)
+        extra_df.to_excel(writer, sheet_name="SOLICITUD DE FINANCIAMIENTO", startrow=2)
         if prog_df is not None:
             prog_df.to_excel(writer, sheet_name="Programación", startrow=2)
         workbook = writer.book
@@ -178,7 +178,7 @@ def export_to_excel(original_df, conv_df, extra_df, prog_df, selected_codigo_bip
         sheets = {
             "Gasto Real": original_df,
             "Conversión": conv_df,
-            "Cuadro Extra": extra_df,
+            "SOLICITUD DE FINANCIAMIENTO": extra_df,
             "Programación": prog_df if prog_df is not None else pd.DataFrame()
         }
         for sheet_name, df in sheets.items():
@@ -259,8 +259,8 @@ def main():
         conv_df_totals = append_totals(conv_df)
         st.table(style_df_contabilidad(conv_df_totals))
         
-        # Sección 3: Cuadro Extra (sin columna "Total")
-        st.markdown("### Cuadro Extra")
+        # Sección 3: SOLICITUD DE FINANCIAMIENTO
+        st.markdown("### SOLICITUD DE FINANCIAMIENTO")
         extra_df = compute_cuadro_extra(conv_df, global_years)
         st.table(style_df_contabilidad(extra_df))
         
