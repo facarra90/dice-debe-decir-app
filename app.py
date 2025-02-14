@@ -62,11 +62,13 @@ def append_totals(df):
 # ----- VALIDACIÓN DE DATOS EDITADOS -----
 
 def validate_edited_data(df, global_years):
-    # Verificar que la columna "ITEMS" exista y no se haya editado
+    if df.empty:
+        st.error("La tabla no puede estar vacía.")
+        return None
     if "ITEMS" not in df.columns:
         st.error("La columna 'ITEMS' es obligatoria y no puede ser eliminada.")
         return None
-    # Forzar la conversión a numérico de las columnas de año
+    # Convertir forzosamente las columnas de año a numérico
     for y in global_years:
         col = str(y)
         if col in df.columns:
@@ -91,7 +93,7 @@ def get_filtered_data(df_base, codigo_bip, etapa, anio_termino):
         return None, None, None
     df_filtered.columns = [str(col).strip() for col in df_filtered.columns]
     expense_cols = [col for col in df_filtered.columns if col.isdigit() and 2011 <= int(col) <= 2024]
-    df_grouped = df_filtered.groupby("ITEMS")[expense_cols].sum().reset_index()  # 'ITEMS' como columna
+    df_grouped = df_filtered.groupby("ITEMS")[expense_cols].sum().reset_index()  # 'ITEMS' como columna normal
     sorted_years = sorted([int(col) for col in expense_cols])
     start_year = None
     for y in sorted_years:
@@ -212,98 +214,105 @@ def export_to_excel(original_df, conv_df, extra_df, prog_df, selected_codigo_bip
     return output.getvalue()
 
 def main():
-    st.title("Dice debe Decir - Aplicación de Gasto")
-    df_base = load_base_data()
-    conversion_factors = load_conversion_factors()
+    try:
+        st.title("Dice debe Decir - Aplicación de Gasto")
+        df_base = load_base_data()
+        conversion_factors = load_conversion_factors()
 
-    st.sidebar.header("Filtrar Datos")
-    codigo_bip_list = sorted(df_base["CODIGO BIP"].dropna().unique().tolist())
-    selected_codigo_bip = st.sidebar.selectbox("Seleccione el CODIGO BIP:", codigo_bip_list)
-    etapa_list = sorted(df_base["ETAPA"].dropna().unique().tolist())
-    selected_etapa = st.sidebar.selectbox("Seleccione la ETAPA:", etapa_list)
-    anio_termino = st.sidebar.number_input("Ingrese el AÑO DE TERMINO del proyecto:",
-                                           min_value=2011, max_value=2100, value=2024, step=1)
+        st.sidebar.header("Filtrar Datos")
+        codigo_bip_list = sorted(df_base["CODIGO BIP"].dropna().unique().tolist())
+        selected_codigo_bip = st.sidebar.selectbox("Seleccione el CODIGO BIP:", codigo_bip_list)
+        etapa_list = sorted(df_base["ETAPA"].dropna().unique().tolist())
+        selected_etapa = st.sidebar.selectbox("Seleccione la ETAPA:", etapa_list)
+        anio_termino = st.sidebar.number_input("Ingrese el AÑO DE TERMINO del proyecto:",
+                                               min_value=2011, max_value=2100, value=2024, step=1)
 
-    if st.sidebar.button("Generar Planilla"):
-        df_grouped, global_years, df_filtered = get_filtered_data(df_base, selected_codigo_bip, selected_etapa, anio_termino)
-        if df_grouped is None:
-            return
+        if st.sidebar.button("Generar Planilla"):
+            df_grouped, global_years, df_filtered = get_filtered_data(df_base, selected_codigo_bip, selected_etapa, anio_termino)
+            if df_grouped is None:
+                return
 
-        nombre_proyecto = df_filtered["NOMBRE"].iloc[0] if "NOMBRE" in df_filtered.columns else "Proyecto sin nombre"
-        with st.container():
-            st.markdown(
-                f"""
-                <div style="padding:5px; background-color:#f0f0f0; border:1px solid #ccc; border-radius:5px; font-size:14px; margin-bottom:10px;">
-                    <b>Proyecto:</b> {nombre_proyecto} &nbsp;&nbsp;&nbsp;
-                    <b>Etapa:</b> {selected_etapa} &nbsp;&nbsp;&nbsp;
-                    <b>Código BIP:</b> {selected_codigo_bip}
-                </div>
-                """, unsafe_allow_html=True
-            )
+            nombre_proyecto = df_filtered["NOMBRE"].iloc[0] if "NOMBRE" in df_filtered.columns else "Proyecto sin nombre"
+            with st.container():
+                st.markdown(
+                    f"""
+                    <div style="padding:5px; background-color:#f0f0f0; border:1px solid #ccc; border-radius:5px; font-size:14px; margin-bottom:10px;">
+                        <b>Proyecto:</b> {nombre_proyecto} &nbsp;&nbsp;&nbsp;
+                        <b>Etapa:</b> {selected_etapa} &nbsp;&nbsp;&nbsp;
+                        <b>Código BIP:</b> {selected_codigo_bip}
+                    </div>
+                    """, unsafe_allow_html=True
+                )
 
-        st.markdown("### Gasto Real no Ajustado Cuadro Completo")
-        # Configurar las columnas de año para que sean numéricas
-        col_config = {}
-        for y in global_years:
-            col = str(y)
-            if col in df_grouped.columns:
-                col_config[col] = st.column_config.NumberColumn(min_value=0)
-        if hasattr(st, "data_editor"):
-            edited_df = st.data_editor(df_grouped, key="final_editor", column_config=col_config)
-        else:
-            edited_df = st.experimental_data_editor(df_grouped, key="final_editor", column_config=col_config)
+            st.markdown("### Gasto Real no Ajustado Cuadro Completo")
+            # Configurar columnas de año para que sean numéricas y bloquear la edición de "ITEMS"
+            col_config = {}
+            for y in global_years:
+                col = str(y)
+                if col in df_grouped.columns:
+                    col_config[col] = st.column_config.NumberColumn(min_value=0)
+            col_config["ITEMS"] = st.column_config.TextColumn(disabled=True)
+            if hasattr(st, "data_editor"):
+                edited_df = st.data_editor(df_grouped, key="final_editor", column_config=col_config)
+            else:
+                edited_df = st.experimental_data_editor(df_grouped, key="final_editor", column_config=col_config)
 
-        # Validar datos ingresados: forzamos conversión de columnas de año y verificamos ITEMS
-        validated_df = validate_edited_data(edited_df, global_years)
-        if validated_df is None:
-            return
+            # Validar datos editados
+            validated_df = validate_edited_data(edited_df, global_years)
+            if validated_df is None:
+                return
 
-        st.markdown("#### Totales")
-        totals_df = append_totals(validated_df)
-        st.table(style_df_contabilidad(totals_df.iloc[-1:].reset_index(drop=True)))
+            # Limpiar caché para asegurar que se usen los datos editados
+            st.cache_data.clear()
 
-        st.markdown("### Conversión a Moneda Pesos (M$)")
-        target_conversion_year = st.number_input("Convertir a año:",
-                                                   min_value=2011, max_value=2100,
-                                                   value=datetime.datetime.now().year, step=1, key="conv_year")
-        conv_df = compute_conversion_table(validated_df, global_years, conversion_factors, target_conversion_year)
-        conv_df_totals = append_totals(conv_df)
-        st.table(style_df_contabilidad(conv_df_totals))
+            st.markdown("#### Totales")
+            totals_df = append_totals(validated_df)
+            st.table(style_df_contabilidad(totals_df.iloc[-1:].reset_index(drop=True)))
 
-        st.markdown("### SOLICITUD DE FINANCIAMIENTO")
-        extra_df = compute_cuadro_extra(conv_df, global_years)
-        totales = {
-            "Pagado al 31/12/2024": extra_df["Pagado al 31/12/2024"].sum(),
-            "Solicitado para el año 2025": extra_df["Solicitado para el año 2025"].sum(),
-            "Solicitado años siguientes": extra_df["Solicitado años siguientes"].sum(),
-            "Costo Total": extra_df["Costo Total"].sum()
-        }
-        totals_row = pd.DataFrame({
-            "Fuente": [""],
-            "Moneda": [""],
-            "Pagado al 31/12/2024": [totales["Pagado al 31/12/2024"]],
-            "Solicitado para el año 2025": [totales["Solicitado para el año 2025"]],
-            "Solicitado años siguientes": [totales["Solicitado años siguientes"]],
-            "Costo Total": [totales["Costo Total"]]
-        }, index=["Total"])
-        extra_df = pd.concat([extra_df, totals_row])
-        st.table(style_df_contabilidad(extra_df))
+            st.markdown("### Conversión a Moneda Pesos (M$)")
+            target_conversion_year = st.number_input("Convertir a año:",
+                                                       min_value=2011, max_value=2100,
+                                                       value=datetime.datetime.now().year, step=1, key="conv_year")
+            conv_df = compute_conversion_table(validated_df, global_years, conversion_factors, target_conversion_year)
+            conv_df_totals = append_totals(conv_df)
+            st.table(style_df_contabilidad(conv_df_totals))
 
-        st.markdown("### Programación en Moneda Original")
-        target_prog_year = st.number_input("Convertir a año (Programación):",
-                                             min_value=1900, max_value=2100,
-                                             value=2010, step=1, key="prog_year")
-        prog_df = compute_programming_table(validated_df, global_years, conversion_factors, target_prog_year)
-        if prog_df is not None:
-            prog_df_totals = append_totals(prog_df)
-            st.table(style_df_contabilidad(prog_df_totals))
+            st.markdown("### SOLICITUD DE FINANCIAMIENTO")
+            extra_df = compute_cuadro_extra(conv_df, global_years)
+            totales = {
+                "Pagado al 31/12/2024": extra_df["Pagado al 31/12/2024"].sum(),
+                "Solicitado para el año 2025": extra_df["Solicitado para el año 2025"].sum(),
+                "Solicitado años siguientes": extra_df["Solicitado años siguientes"].sum(),
+                "Costo Total": extra_df["Costo Total"].sum()
+            }
+            totals_row = pd.DataFrame({
+                "Fuente": [""],
+                "Moneda": [""],
+                "Pagado al 31/12/2024": [totales["Pagado al 31/12/2024"]],
+                "Solicitado para el año 2025": [totales["Solicitado para el año 2025"]],
+                "Solicitado años siguientes": [totales["Solicitado años siguientes"]],
+                "Costo Total": [totales["Costo Total"]]
+            }, index=["Total"])
+            extra_df = pd.concat([extra_df, totals_row])
+            st.table(style_df_contabilidad(extra_df))
 
-        st.markdown("### Exportar a Excel")
-        if st.button("Exportar a Excel"):
-            excel_data = export_to_excel(validated_df, conv_df, extra_df, prog_df, selected_codigo_bip)
-            st.download_button(label="Descargar Excel", data=excel_data,
-                               file_name="exported_data.xlsx",
-                               mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+            st.markdown("### Programación en Moneda Original")
+            target_prog_year = st.number_input("Convertir a año (Programación):",
+                                                 min_value=1900, max_value=2100,
+                                                 value=2010, step=1, key="prog_year")
+            prog_df = compute_programming_table(validated_df, global_years, conversion_factors, target_prog_year)
+            if prog_df is not None:
+                prog_df_totals = append_totals(prog_df)
+                st.table(style_df_contabilidad(prog_df_totals))
+
+            st.markdown("### Exportar a Excel")
+            if st.button("Exportar a Excel"):
+                excel_data = export_to_excel(validated_df, conv_df, extra_df, prog_df, selected_codigo_bip)
+                st.download_button(label="Descargar Excel", data=excel_data,
+                                   file_name="exported_data.xlsx",
+                                   mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    except Exception as e:
+        st.error(f"Ocurrió un error inesperado: {e}")
 
 if __name__ == '__main__':
     main()
