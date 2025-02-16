@@ -25,7 +25,8 @@ def load_conversion_factors():
     Retorna:
       DataFrame con el año base como índice (tipo int) y las columnas con los factores convertidos a float.
     """
-    df = pd.read_csv("factores_conversion.csv", dtype=str)
+    df = pd.read_csv("factores_conversion.csv", dtype=str, encoding="latin-1")
+
     
     # Convertir la primera columna (año base) a entero
     base_year_col = df.columns[0]
