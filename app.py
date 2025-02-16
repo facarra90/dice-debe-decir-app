@@ -18,7 +18,7 @@ def load_conversion_factors():
     """
     Carga la tabla de factores de conversión desde un archivo CSV.
     Se espera que el CSV tenga la siguiente estructura:
-      - La primera columna (index) corresponde al año base.
+      - La primera columna (índice) corresponde al año base.
       - Las columnas restantes corresponden a los años de destino.
     El resultado es un diccionario anidado con la forma:
       { año_base: { año_destino: factor, ... }, ... }
@@ -166,7 +166,6 @@ def convert_table(df, conversion_year, conversion_factors):
     
     for col in year_cols:
         base_year = int(col)
-        # Buscar el factor correspondiente en la tabla cargada
         if base_year in conversion_factors:
             factor = conversion_factors[base_year].get(conversion_year)
             if factor is None:
@@ -200,6 +199,9 @@ def main():
     st.title("Gasto Real no Ajustado Cuadro Completo")
     df_base = load_base_data()
     conversion_factors = load_conversion_factors()  # Cargar factores desde el CSV
+    if not conversion_factors:
+        st.error("No se pudo cargar la tabla de factores de conversión. Verifica el archivo factores_conversion.csv.")
+        return
     
     # Filtros en la barra lateral
     st.sidebar.header("Filtrar Datos")
@@ -209,8 +211,6 @@ def main():
     selected_etapa = st.sidebar.selectbox("Seleccione la ETAPA:", etapa_list)
     anio_termino = st.sidebar.number_input("Ingrese el AÑO DE TERMINO del proyecto:",
                                            min_value=2011, max_value=2100, value=2024, step=1)
-    
-    # Seleccionar el año para la conversión de moneda
     conversion_year = st.sidebar.selectbox("Seleccione el año para la conversión:", list(range(2011, 2025)))
     
     if st.sidebar.button("Generar Planilla"):
@@ -245,7 +245,6 @@ def main():
         
         # Mostrar la tabla original (sin conversión) utilizando todo el ancho disponible
         df_formatted = df_final.copy()
-        # Aplicar formato de miles de pesos a las columnas numéricas
         for col in [c for c in df_formatted.columns if c.isdigit()] + (["Total"] if "Total" in df_formatted.columns else []):
             df_formatted[col] = df_formatted[col].apply(format_miles_pesos)
         st.dataframe(df_formatted, use_container_width=True)
