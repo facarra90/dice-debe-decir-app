@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import csv
+from datetime import datetime
 
 # Configurar la página para que use el ancho completo
 st.set_page_config(layout="wide")
@@ -244,7 +245,17 @@ def main():
             return
         
         available_moneda = sorted(conversion_factors.columns, key=lambda x: int(x))
-        dest_moneda = st.sidebar.selectbox("Seleccione la moneda de destino (año de conversión):", available_moneda)
+        # Seleccionar por defecto el año actual si está en la lista, de lo contrario, usar el primero.
+        default_year = str(datetime.now().year)
+        if default_year in available_moneda:
+            default_index = available_moneda.index(default_year)
+        else:
+            default_index = 0
+        dest_moneda = st.sidebar.selectbox(
+            "Seleccione la moneda de destino (año de conversión):",
+            available_moneda,
+            index=default_index
+        )
         
         df_converted = convert_expense_dataframe(validated_df, int(dest_moneda), conversion_factors)
         df_converted_final = append_totals_with_column(df_converted)
