@@ -107,6 +107,10 @@ def get_filtered_data(df_base, codigo_bip, etapa, anio_termino):
         st.error("El AÑO DE TERMINO debe ser mayor o igual al año de inicio del gasto.")
         return None, None, None
     global_years = list(range(start_year, anio_termino + 1))
+    # Forzar que la columna 2025 esté presente
+    if 2025 not in global_years:
+        global_years.append(2025)
+        global_years.sort()
     cols = [str(y) for y in global_years]
     for col in cols:
         if col not in df_grouped.columns:
@@ -246,7 +250,7 @@ def main():
                 )
 
             st.markdown("### Gasto Real no Ajustado Cuadro Completo")
-            # Configurar columnas: permitir editar solo los gastos (años) y bloquear "ITEMS"
+            # Configurar columnas: permitir editar los valores de los años y bloquear "ITEMS"
             col_config = {}
             for y in global_years:
                 col = str(y)
@@ -275,7 +279,7 @@ def main():
                                                        min_value=2011, max_value=2100,
                                                        value=datetime.datetime.now().year, step=1, key="conv_year")
             conv_df = compute_conversion_table(validated_df, global_years, conversion_factors, target_conversion_year)
-            # Configurar que solo se puedan editar columnas de años >= 2025; las anteriores quedan bloqueadas.
+            # Configurar edición: permitir modificar solo columnas de años >= 2025; las anteriores quedan bloqueadas.
             conv_col_config = {}
             for y in global_years:
                 col = str(y)
