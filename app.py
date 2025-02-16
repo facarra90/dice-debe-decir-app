@@ -18,8 +18,11 @@ def load_conversion_factors():
     """
     Carga y procesa el archivo 'factores_conversion.csv' que contiene los factores de conversión.
 
+    Se asume que el CSV está delimitado por punto y coma (;). Si tu archivo utiliza otro delimitador,
+    ajusta el parámetro sep.
+
     Estructura del CSV:
-      - Primera fila: cabecera con la etiqueta (por ejemplo, "Año Base") en la primera celda
+      - Primera fila: cabecera con la etiqueta (por ejemplo, "AÑO Base") en la primera celda
         y los años de destino en las siguientes.
       - Filas siguientes: cada fila tiene el año base (primera columna) y los factores de conversión
         en las columnas restantes. Los valores numéricos pueden tener comas como separador decimal.
@@ -28,13 +31,13 @@ def load_conversion_factors():
       DataFrame con el año base como índice (tipo int) y las columnas con los factores convertidos a float.
     """
     try:
-        # Ajusta la codificación según corresponda (ej. "latin-1", "utf-8-sig", etc.)
-        df = pd.read_csv("factores_conversion.csv", dtype=str, encoding="latin-1")
+        # Cambia el separador si es necesario (por ejemplo, sep=";" o sep=",")
+        df = pd.read_csv("factores_conversion.csv", dtype=str, encoding="latin-1", sep=";")
     except Exception as e:
         st.error(f"Error al cargar 'factores_conversion.csv': {e}")
         return None
 
-    # Obtener el nombre de la primera columna (que se espera contenga el año base)
+    # Obtener el nombre de la primera columna (se espera que contenga el año base)
     base_year_col = df.columns[0]
 
     # Convertir la columna a numérico, forzando valores no convertibles a NaN
@@ -148,7 +151,7 @@ def append_totals_with_column(df):
     df_copy = df.copy()
     # Identificar las columnas de años (números)
     numeric_cols = [col for col in df_copy.columns if col.isdigit()]
-    # Agregar columna "Total" (suma de los valores de los columnas numéricas)
+    # Agregar columna "Total" (suma de los valores de las columnas numéricas)
     df_copy["Total"] = df_copy[numeric_cols].sum(axis=1)
     
     # Crear una fila con los totales de cada columna numérica y de la columna "Total"
