@@ -1,8 +1,17 @@
 import streamlit as st
 import pandas as pd
 
-# Configurar la página para que use el ancho completo
+# Configurar la página para que use todo el ancho disponible
 st.set_page_config(layout="wide")
+
+# Definir la tabla de factores de conversión
+# Ejemplo: Para cada año base (2011 a 2024), se genera un diccionario interno para los años de destino
+# La fórmula aplicada es: factor = 1 + 0.05 * (año_destino - año_base)
+# (Este es solo un ejemplo; reemplaza los valores según tus requerimientos)
+conversion_factors = {
+    base_year: {target: 1 + 0.05 * (target - base_year) for target in range(2011, 2025)}
+    for base_year in range(2011, 2025)
+}
 
 # Inicializar la variable de estado para mantener visible la planilla
 if "planilla_generada" not in st.session_state:
@@ -118,6 +127,51 @@ def append_totals_with_column(df):
     combined = pd.concat([df_copy, totals_df], ignore_index=True)
     return combined
 
+def convert_table(df, conversion_year, conversion_factors):
+    """
+    Genera un nuevo DataFrame con los valores convertidos a la moneda del año indicado.
+    Para cada columna de año:
+      - Se obtiene el factor de conversión para el par (año de la columna, año de destino).
+      - Si el año base no existe en la tabla de factores, se utiliza el factor del máximo año base disponible.
+      - Se aplica la conversión: (valor * factor) / 1000.
+    Se recalcula la columna "Total" como la suma de los años convertidos y se formatea la salida.
+    """
+    df_conv = df.copy()
+    # Identificar las columnas de años (cadenas que representan dígitos)
+    year_cols = [col for col in df_conv.columns if col.isdigit()]
+    
+    for col in year_cols:
+        base_year = int(col)
+        # Buscar el factor correspondiente
+        if base_year in conversion_factors:
+            factor = conversion_factors[base_year].get(conversion_year)
+            if factor is None:
+                # Si no se encuentra el factor para el año de destino, se usa el factor del máximo año de destino disponible
+                max_target = max(conversion_factors[base_year].keys())
+                factor = conversion_factors[base_year][max_target]
+        else:
+            # Si el año de la columna no está en la tabla, se usa el factor del máximo año base disponible
+            max_base = max(conversion_factors.keys())
+            factor = conversion_factors[max_base].get(conversion_year)
+            if factor is None:
+                max_target = max(conversion_factors[max_base].keys())
+                factor = conversion_factors[max_base][max_target]
+        # Convertir la columna: (valor * factor) / 1000
+        df_conv[col] = pd.to_numeric(df_conv[col], errors="coerce").fillna(0)
+        df_conv[col] = (df_conv[col] * factor) / 1000
+        df_conv[col] = df_conv[col].round(0).astype(int)
+    
+    # Recalcular la columna "Total" como la suma de las columnas de año convertidas
+    if "Total" in df_conv.columns:
+        df_conv["Total"] = df_conv[year_cols].sum(axis=1)
+        df_conv["Total"] = df_conv["Total"].round(0).astype(int)
+    
+    # Aplicar el formato de "Miles de Pesos" a las columnas numéricas
+    for col in year_cols + (["Total"] if "Total" in df_conv.columns else []):
+        df_conv[col] = df_conv[col].apply(format_miles_pesos)
+    
+    return df_conv
+
 def main():
     st.title("Gasto Real no Ajustado Cuadro Completo")
     df_base = load_base_data()
@@ -130,6 +184,9 @@ def main():
     selected_etapa = st.sidebar.selectbox("Seleccione la ETAPA:", etapa_list)
     anio_termino = st.sidebar.number_input("Ingrese el AÑO DE TERMINO del proyecto:",
                                            min_value=2011, max_value=2100, value=2024, step=1)
+    
+    # Seleccionar el año para la conversión de moneda
+    conversion_year = st.sidebar.selectbox("Seleccione el año para la conversión:", list(range(2011, 2025)))
     
     if st.sidebar.button("Generar Planilla"):
         st.session_state.planilla_generada = True
@@ -161,14 +218,17 @@ def main():
         # Agregar columna "Total" a cada fila y la fila de totales final
         df_final = append_totals_with_column(validated_df)
         
-        # Aplicar el formato de "Miles de Pesos" a las columnas numéricas
+        # Mostrar la tabla original (sin conversión) utilizando todo el ancho disponible
         df_formatted = df_final.copy()
-        for col in df_formatted.columns:
-            if col.isdigit() or col == "Total":
-                df_formatted[col] = df_formatted[col].apply(format_miles_pesos)
-        
-        # Mostrar la tabla final usando todo el ancho disponible
+        # Aplicar formato de miles de pesos a las columnas numéricas
+        for col in [c for c in df_formatted.columns if c.isdigit()] + (["Total"] if "Total" in df_formatted.columns else []):
+            df_formatted[col] = df_formatted[col].apply(format_miles_pesos)
         st.dataframe(df_formatted, use_container_width=True)
+        
+        # Generar la tabla convertida a la moneda del año seleccionado
+        df_converted = convert_table(df_final, conversion_year, conversion_factors)
+        st.markdown(f"### Gasto Real Ajustado a la moneda del año {conversion_year}")
+        st.dataframe(df_converted, use_container_width=True)
 
 if __name__ == '__main__':
     main()
