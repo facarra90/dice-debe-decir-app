@@ -1,6 +1,9 @@
 import streamlit as st
 import pandas as pd
 
+# Configurar la página para usar el ancho completo
+st.set_page_config(page_title="Gasto Real no Ajustado", layout="wide")
+
 # Inicializar la variable de estado para mantener visible la planilla
 if "planilla_generada" not in st.session_state:
     st.session_state.planilla_generada = False
