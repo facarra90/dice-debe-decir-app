@@ -239,7 +239,7 @@ def main():
         
         st.dataframe(df_formatted, use_container_width=True)
         
-        st.markdown("### Anualización de la Inversión")
+        # Cargar los factores de conversión
         conversion_factors = load_conversion_factors()
         if conversion_factors is None:
             return
@@ -256,6 +256,9 @@ def main():
             available_moneda,
             index=default_index
         )
+        
+        # Actualizar el título incluyendo el año seleccionado
+        st.markdown(f"### Anualización de la Inversión en Moneda {dest_moneda}")
         
         df_converted = convert_expense_dataframe(validated_df, int(dest_moneda), conversion_factors)
         df_converted_final = append_totals_with_column(df_converted)
