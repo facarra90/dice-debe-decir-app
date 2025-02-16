@@ -78,19 +78,6 @@ def validate_edited_data(df, global_years):
                 return None
     return df
 
-# Función para agregar una fila de totales (suma de cada fila y de cada columna)
-def append_totals(df):
-    df = df.copy()
-    numeric_cols = df.select_dtypes(include=["number"]).columns
-    df["Total"] = df[numeric_cols].sum(axis=1)
-    total_row = df[numeric_cols].sum(axis=0)
-    total_row["Total"] = total_row.sum()
-    for col in df.columns.difference(numeric_cols):
-        total_row[col] = ""
-    total_row.name = "Total"
-    df = pd.concat([df, total_row.to_frame().T])
-    return df
-
 # Función principal
 def main():
     st.title("Gasto Real no Ajustado Cuadro Completo")
@@ -130,10 +117,7 @@ def main():
         if validated_df is None:
             return
         
-        # Agregar la fila de totales y mostrarla
-        totals_df = append_totals(validated_df)
-        st.markdown("#### Totales")
-        st.table(totals_df.iloc[-1:].reset_index(drop=True))
-        
+        # Se muestra solo la tabla editable sin la fila de totales
+
 if __name__ == '__main__':
     main()
