@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import csv
 
 # Configurar la página para que use el ancho completo
 st.set_page_config(layout="wide")
@@ -30,40 +31,49 @@ def load_conversion_factors():
           - Columnas siguientes: Factores de conversión correspondientes a cada año de destino,
             con valores numéricos que pueden usar coma (,) como separador decimal.
     
-    Retorna:
-      DataFrame con el año base como índice (tipo int) y las columnas con los factores convertidos a float.
+    Se construye un diccionario de factores con la siguiente estructura:
+       { año_base: { año_destino: factor, ... }, ... }
+    
+    Finalmente, se convierte a un DataFrame donde el índice es el año base y las columnas
+    son los años de destino.
     """
+    factors = {}
     try:
-        df = pd.read_csv("factores_conversion.csv", dtype=str, encoding="latin-1", sep=";")
+        with open("factores_conversion.csv", newline='', encoding="latin-1") as csvfile:
+            reader = csv.reader(csvfile, delimiter=";")
+            # Leer la cabecera sin convertirla a números.
+            header = next(reader)
+            # La primera celda es descriptiva; las siguientes son los años de destino.
+            destination_years = [col.strip() for col in header[1:]]
+            for row in reader:
+                if not row:
+                    continue  # omitir filas vacías
+                # La primera columna es el año base: convertir a entero.
+                try:
+                    base_year = int(row[0].strip())
+                except Exception as e:
+                    st.error(f"Error al convertir el año base '{row[0]}' a entero: {e}")
+                    return None
+                subdict = {}
+                for i, val in enumerate(row[1:], start=1):
+                    # Eliminar espacios y reemplazar coma decimal por punto.
+                    val_clean = val.strip().replace(",", ".")
+                    try:
+                        factor = float(val_clean)
+                    except Exception as e:
+                        st.error(f"Error al convertir el valor '{val}' en la fila con año base {base_year}: {e}")
+                        return None
+                    # Usamos el año de destino correspondiente de la cabecera.
+                    subdict[destination_years[i-1]] = factor
+                factors[base_year] = subdict
     except Exception as e:
-        st.error(f"Error al cargar 'factores_conversion.csv': {e}")
+        st.error(f"Error al leer 'factores_conversion.csv': {e}")
         return None
 
-    # Nombre de la columna que contiene el año base (primer encabezado)
-    base_year_col = df.columns[0]
-
-    # Convertir la primera columna a numérico (entero)
-    df[base_year_col] = pd.to_numeric(df[base_year_col].str.strip(), errors="coerce")
-    if df[base_year_col].isnull().any():
-        st.error(
-            f"Error al convertir la columna '{base_year_col}' a números. "
-            "Por favor, verifica que todos los valores sean numéricos sin espacios adicionales."
-        )
-        return None
-    df[base_year_col] = df[base_year_col].astype(int)
-
-    # Procesar las columnas siguientes: eliminar espacios, reemplazar comas por puntos y convertir a float
-    for col in df.columns[1:]:
-        df[col] = df[col].str.strip().str.replace(',', '.')
-        try:
-            df[col] = df[col].astype(float)
-        except Exception as e:
-            st.error(f"Error al convertir la columna '{col}' a float: {e}")
-            return None
-
-    # Establecer la primera columna (año base) como índice
-    df.set_index(base_year_col, inplace=True)
-    return df
+    # Convertir el diccionario a DataFrame:
+    df_factors = pd.DataFrame.from_dict(factors, orient="index")
+    df_factors.index.name = header[0].strip()
+    return df_factors
 
 def format_miles_pesos(x):
     """
@@ -257,4 +267,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
