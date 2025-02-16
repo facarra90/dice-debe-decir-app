@@ -139,30 +139,37 @@ def main():
         if df_grouped is None:
             return
         
-        st.markdown("### Gasto Real no Ajustado Cuadro Completo")
-        # Configuración para el editor: se permite editar las columnas numéricas y se bloquea "ITEMS"
+        # Generar el cuadro final con totales
+        df_final = append_totals_with_column(df_grouped)
+        
+        st.markdown("### Gasto Real no Ajustado Cuadro Completo (Editable)")
+        # Configuración para el editor:
+        # Se permite editar las columnas numéricas de años, mientras que "ITEMS" y "Total" son de solo lectura.
         col_config = {}
         for y in global_years:
             col = str(y)
-            if col in df_grouped.columns:
+            if col in df_final.columns:
                 col_config[col] = st.column_config.NumberColumn(min_value=0)
         col_config["ITEMS"] = st.column_config.TextColumn(disabled=True)
+        col_config["Total"] = st.column_config.NumberColumn(disabled=True)
         
-        # Mostrar la tabla editable
+        # Mostrar el segundo cuadro (editable) que ya incluye los totales
         if hasattr(st, "data_editor"):
-            edited_df = st.data_editor(df_grouped, key="final_editor", column_config=col_config)
+            edited_df_final = st.data_editor(df_final, key="final_editor", column_config=col_config)
         else:
-            edited_df = st.experimental_data_editor(df_grouped, key="final_editor", column_config=col_config)
+            edited_df_final = st.experimental_data_editor(df_final, key="final_editor", column_config=col_config)
         
-        validated_df = validate_edited_data(edited_df, global_years)
+        # Para recalcular los totales, se elimina la fila "Total" del DataFrame editado
+        df_without_total = edited_df_final[edited_df_final["ITEMS"] != "Total"].copy()
+        validated_df = validate_edited_data(df_without_total, global_years)
         if validated_df is None:
             return
         
-        # Agregar columna "Total" a cada fila y la fila de totales final
-        df_final = append_totals_with_column(validated_df)
+        # Recalcular totales y actualizar el cuadro final
+        df_final_updated = append_totals_with_column(validated_df)
         
-        # Aplicar el formato de "Miles de Pesos" sin decimales (se usa Pandas Styler para la visualización)
-        df_styled = df_final.style.format(format_miles_pesos)
+        # Aplicar el formato de "Miles de Pesos" sin decimales
+        df_styled = df_final_updated.style.format(format_miles_pesos)
         
         st.table(df_styled)
 
