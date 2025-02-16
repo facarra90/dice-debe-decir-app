@@ -1,9 +1,17 @@
 import streamlit as st
 import pandas as pd
 
-# Inicializar la variable de estado para mantener visible la planilla
+# Inicializar el estado para mantener visible la planilla
 if "planilla_generada" not in st.session_state:
     st.session_state.planilla_generada = False
+
+# Función para formatear números en "miles de pesos" sin decimales.
+# Se redondea el número, se separan los miles con punto y no se muestran decimales.
+def format_miles_pesos(x):
+    try:
+        return f"{int(round(x)):,}".replace(",", ".")
+    except Exception:
+        return x
 
 @st.cache_data
 def load_base_data():
@@ -11,7 +19,7 @@ def load_base_data():
     return pd.read_excel("BASE DE DATOS.xlsx")
 
 def get_filtered_data(df_base, codigo_bip, etapa, anio_termino):
-    # Normalizar los filtros
+    # Normalizar filtros
     codigo_bip_norm = str(codigo_bip).strip().upper()
     etapa_norm = str(etapa).strip().upper()
     df_filtered = df_base[
@@ -26,7 +34,7 @@ def get_filtered_data(df_base, codigo_bip, etapa, anio_termino):
     df_filtered.columns = [str(col).strip() for col in df_filtered.columns]
     # Seleccionar las columnas de años entre 2011 y 2024
     expense_cols = [col for col in df_filtered.columns if col.isdigit() and 2011 <= int(col) <= 2024]
-    # Agrupar por "ITEMS" y sumar los gastos de cada año
+    # Agrupar por "ITEMS" y sumar los valores de cada año
     df_grouped = df_filtered.groupby("ITEMS")[expense_cols].sum().reset_index()
 
     # Determinar el primer año en el que se registra gasto
@@ -45,50 +53,44 @@ def get_filtered_data(df_base, codigo_bip, etapa, anio_termino):
 
     # Crear la lista de años desde el inicio hasta el año de término
     global_years = list(range(start_year, anio_termino + 1))
-    # Forzar la inclusión de la columna 2025
+    # Forzar la inclusión de la columna 2025, si no está
     if 2025 not in global_years:
         global_years.append(2025)
         global_years.sort()
 
-    # Asegurar que exista una columna para cada año en la lista
     cols = [str(y) for y in global_years]
     for col in cols:
         if col not in df_grouped.columns:
             df_grouped[col] = 0
 
-    # Reordenar columnas: "ITEMS" seguido de los años en orden
+    # Reordenar columnas: "ITEMS" seguido de los años
     df_grouped = df_grouped[["ITEMS"] + cols].sort_values("ITEMS")
-    # Convertir las columnas de años a valores numéricos
+    # Convertir columnas de años a numérico
     for col in df_grouped.columns:
         if col.isdigit():
             df_grouped[col] = pd.to_numeric(df_grouped[col], errors="coerce").fillna(0)
     return df_grouped, global_years, df_filtered
 
 def validate_edited_data(df, global_years):
-    # Verificar que la tabla no esté vacía y que contenga la columna "ITEMS"
     if df.empty:
         st.error("La tabla no puede estar vacía.")
         return None
     if "ITEMS" not in df.columns:
         st.error("La columna 'ITEMS' es obligatoria y no puede ser eliminada.")
         return None
-    # Convertir las columnas de años a numérico
     for y in global_years:
         col = str(y)
         if col in df.columns:
             try:
-                df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
+                df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
             except Exception as e:
                 st.error(f"Error al convertir la columna {col}: {e}")
                 return None
     return df
 
 def append_totals(df):
-    # Realiza una copia para no modificar el original
     df_copy = df.copy()
-    # Se identifican las columnas numéricas
     numeric_cols = df_copy.select_dtypes(include=["number"]).columns
-    # Se crea un diccionario para la fila de totales
     totals = {}
     for col in df_copy.columns:
         if col in numeric_cols:
@@ -97,7 +99,6 @@ def append_totals(df):
             totals[col] = ""
     totals["ITEMS"] = "Total"
     totals_df = pd.DataFrame([totals])
-    # Concatenar la fila de totales al DataFrame original
     combined = pd.concat([df_copy, totals_df], ignore_index=True)
     return combined
 
@@ -114,7 +115,7 @@ def main():
     anio_termino = st.sidebar.number_input("Ingrese el AÑO DE TERMINO del proyecto:",
                                            min_value=2011, max_value=2100, value=2024, step=1)
     
-    # Al presionar el botón se activa la bandera para mostrar la planilla
+    # Se activa la bandera para mostrar la planilla
     if st.sidebar.button("Generar Planilla"):
         st.session_state.planilla_generada = True
     
@@ -122,9 +123,9 @@ def main():
         df_grouped, global_years, _ = get_filtered_data(df_base, selected_codigo_bip, selected_etapa, anio_termino)
         if df_grouped is None:
             return
-
-        st.markdown("### Gasto Real no Ajustado Cuadro Completo (con Totales)")
-        # Configurar la edición: se permiten editar las columnas numéricas y se bloquea "ITEMS"
+        
+        st.markdown("### Gasto Real no Ajustado Cuadro Completo")
+        # Configuración de edición: se permite editar los valores numéricos y se bloquea "ITEMS"
         col_config = {}
         for y in global_years:
             col = str(y)
@@ -132,7 +133,7 @@ def main():
                 col_config[col] = st.column_config.NumberColumn(min_value=0)
         col_config["ITEMS"] = st.column_config.TextColumn(disabled=True)
         
-        # Mostrar la tabla editable (sin la fila de totales)
+        # Mostrar el data editor para la edición interactiva
         if hasattr(st, "data_editor"):
             edited_df = st.data_editor(df_grouped, key="final_editor", column_config=col_config)
         else:
@@ -141,10 +142,11 @@ def main():
         validated_df = validate_edited_data(edited_df, global_years)
         if validated_df is None:
             return
-
-        # Incorporar la fila de totales en el mismo DataFrame
+        
+        # Agregar la fila de totales que suma cada columna numérica
         df_con_totales = append_totals(validated_df)
-        st.table(df_con_totales)
+        # Mostrar la tabla con la fila de totales y aplicando el formato: miles de pesos sin decimales.
+        st.table(df_con_totales.style.format(format_miles_pesos))
 
 if __name__ == '__main__':
     main()
