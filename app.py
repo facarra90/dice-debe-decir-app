@@ -1,6 +1,9 @@
 import streamlit as st
 import pandas as pd
 
+# Configurar la página para que use el ancho completo
+st.set_page_config(layout="wide")
+
 # Inicializar la variable de estado para mantener visible la planilla
 if "planilla_generada" not in st.session_state:
     st.session_state.planilla_generada = False
@@ -158,10 +161,14 @@ def main():
         # Agregar columna "Total" a cada fila y la fila de totales final
         df_final = append_totals_with_column(validated_df)
         
-        # Aplicar el formato de "Miles de Pesos" sin decimales (se usa Pandas Styler para la visualización)
-        df_styled = df_final.style.format(format_miles_pesos)
+        # Aplicar el formato de "Miles de Pesos" a las columnas numéricas
+        df_formatted = df_final.copy()
+        for col in df_formatted.columns:
+            if col.isdigit() or col == "Total":
+                df_formatted[col] = df_formatted[col].apply(format_miles_pesos)
         
-        st.table(df_styled)
+        # Mostrar la tabla final usando todo el ancho disponible
+        st.dataframe(df_formatted, use_container_width=True)
 
 if __name__ == '__main__':
     main()
