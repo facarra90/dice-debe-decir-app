@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 import csv
-from st_aggrid import AgGrid, GridOptionsBuilder
 
 # Configurar la página para que use el ancho completo
 st.set_page_config(layout="wide")
@@ -18,31 +17,23 @@ def load_base_data():
 @st.cache_data
 def load_conversion_factors():
     """
-    Carga y procesa el archivo 'factores_conversion.csv' con el siguiente formato:
+    Carga y procesa el archivo 'factores_conversion.csv' siguiendo estos pasos:
     
-    - Delimitador: punto y coma (;)
-    - Codificación: latin-1 (ISO-8859-1)
-    
-    Estructura:
-      * Primera fila (cabecera):
-          - La primera celda contiene un encabezado descriptivo (ej.: "AÑO Base")
-          - Las siguientes celdas contienen los años de destino (ej.: 2015, 2016, ..., 2025)
-      * Filas siguientes:
-          - Primera columna: Año base (número entero sin espacios, ej.: 2011, 2012, ..., 2024)
-          - Columnas siguientes: Factores de conversión correspondientes a cada año de destino,
-            con valores numéricos que pueden usar coma (,) como separador decimal.
-    
-    Se construye un diccionario de factores con la siguiente estructura:
-       { año_base: { año_destino: factor, ... }, ... }
-    
-    Finalmente, se convierte a un DataFrame donde el índice es el año base y las columnas
-    son los años de destino.
+    1. Abre el archivo usando open() con newline='' y encoding="latin-1".
+    2. Lee el archivo usando csv.reader con delimiter="\t" (según el error, los campos están separados por tabulaciones).
+    3. La primera fila es la cabecera:
+         - La primera celda es un encabezado descriptivo (ej.: "AÑO Base").
+         - Las siguientes celdas son los años de destino.
+    4. Itera sobre las filas de datos:
+         - Convierte el primer elemento (año base) a entero.
+         - Para cada valor de las columnas siguientes, elimina espacios, reemplaza la coma decimal por punto y convierte a float.
+    5. Construye un diccionario y luego lo convierte a DataFrame.
     """
     factors = {}
     try:
-        # Abrir el archivo con el delimitador correcto
+        # Cambia el delimitador a "\t" porque los errores indican que se usan tabulaciones
         with open("factores_conversion.csv", newline='', encoding="latin-1") as csvfile:
-            reader = csv.reader(csvfile, delimiter=";")
+            reader = csv.reader(csvfile, delimiter="\t")
             # Leer la cabecera (no se convierte a números)
             header = next(reader)
             # La primera celda es descriptiva; las siguientes son los años de destino.
@@ -50,6 +41,7 @@ def load_conversion_factors():
             for row in reader:
                 if not row:
                     continue  # omitir filas vacías
+                # El primer elemento debe ser el año base: eliminar espacios y convertir a entero.
                 try:
                     base_year = int(row[0].strip())
                 except Exception as e:
@@ -57,13 +49,14 @@ def load_conversion_factors():
                     return None
                 subdict = {}
                 for i, val in enumerate(row[1:], start=1):
-                    # Eliminar espacios y reemplazar la coma por punto
+                    # Eliminar espacios y reemplazar coma por punto
                     val_clean = val.strip().replace(",", ".")
                     try:
                         factor = float(val_clean)
                     except Exception as e:
                         st.error(f"Error al convertir el valor '{val}' en la fila con año base {base_year}: {e}")
                         return None
+                    # Asignar el factor al año de destino correspondiente
                     subdict[destination_years[i-1]] = factor
                 factors[base_year] = subdict
     except Exception as e:
@@ -97,10 +90,14 @@ def get_filtered_data(df_base, codigo_bip, etapa, anio_termino):
         st.error("No se encontraron datos para el CODIGO BIP y ETAPA seleccionados.")
         return None, None, None
 
+    # Quitar espacios en los nombres de columnas
     df_filtered.columns = [str(col).strip() for col in df_filtered.columns]
+    # Seleccionar columnas que representan años (2011 a 2024)
     expense_cols = [col for col in df_filtered.columns if col.isdigit() and 2011 <= int(col) <= 2024]
+    # Agrupar por "ITEMS" y sumar los gastos de cada año
     df_grouped = df_filtered.groupby("ITEMS")[expense_cols].sum().reset_index()
 
+    # Determinar el primer año en el que se registra gasto
     sorted_years = sorted([int(col) for col in expense_cols])
     start_year = None
     for y in sorted_years:
@@ -114,17 +111,22 @@ def get_filtered_data(df_base, codigo_bip, etapa, anio_termino):
         st.error("El AÑO DE TERMINO debe ser mayor o igual al año de inicio del gasto.")
         return None, None, None
 
+    # Crear la lista de años desde el inicio hasta el AÑO DE TERMINO
     global_years = list(range(start_year, anio_termino + 1))
+    # Forzar la inclusión del año 2025
     if 2025 not in global_years:
         global_years.append(2025)
         global_years.sort()
 
+    # Asegurar que exista una columna para cada año en la lista
     cols = [str(y) for y in global_years]
     for col in cols:
         if col not in df_grouped.columns:
             df_grouped[col] = 0
 
+    # Reordenar las columnas: "ITEMS" seguido de los años en orden
     df_grouped = df_grouped[["ITEMS"] + cols].sort_values("ITEMS")
+    # Convertir las columnas de año a valores numéricos
     for col in df_grouped.columns:
         if col.isdigit():
             df_grouped[col] = pd.to_numeric(df_grouped[col], errors="coerce").fillna(0)
@@ -148,6 +150,10 @@ def validate_edited_data(df, global_years):
     return df
 
 def append_totals_with_column(df):
+    """
+    Agrega una columna "Total" a cada fila con la suma de los valores numéricos (años),
+    y luego añade una fila de totales que sume cada columna, incluida la columna "Total".
+    """
     df_copy = df.copy()
     numeric_cols = [col for col in df_copy.columns if col.isdigit()]
     df_copy["Total"] = df_copy[numeric_cols].sum(axis=1)
@@ -161,7 +167,18 @@ def append_totals_with_column(df):
     return combined
 
 def convert_expense_dataframe(df, dest_year, conversion_factors):
+    """
+    Convierte los valores de gasto en el DataFrame original al año (o escala) destino indicado, 
+    utilizando los factores de conversión.
+    
+    Para cada columna (año de origen) se aplica:
+       Valor convertido = (Valor original * Factor de conversión) / 1000
+
+    Si el año de origen no se encuentra en conversion_factors, se usa el máximo año base disponible.
+    Si el año destino no existe en la tabla, se utiliza el factor correspondiente al máximo año destino.
+    """
     converted_df = df.copy()
+    
     for col in df.columns:
         if col.isdigit():
             origin_year = int(col)
@@ -179,6 +196,7 @@ def main():
     st.title("Gasto Real no Ajustado Cuadro Completo")
     df_base = load_base_data()
     
+    # Filtros en la barra lateral
     st.sidebar.header("Filtrar Datos")
     codigo_bip_list = sorted(df_base["CODIGO BIP"].dropna().unique().tolist())
     selected_codigo_bip = st.sidebar.selectbox("Seleccione el CODIGO BIP:", codigo_bip_list)
@@ -196,30 +214,31 @@ def main():
             return
         
         st.markdown("### Gasto Real no Ajustado Cuadro Completo (Valores Originales)")
-        # Visualizamos la tabla original usando AgGrid para autoajuste de columnas.
-        gb_original = GridOptionsBuilder.from_dataframe(df_grouped)
-        gb_original.configure_default_column(autoWidth=True, wrapText=True)
-        gridOptions_original = gb_original.build()
-        AgGrid(df_grouped, gridOptions=gridOptions_original, fit_columns_on_grid_load=True)
+        col_config = {}
+        for y in global_years:
+            col = str(y)
+            if col in df_grouped.columns:
+                col_config[col] = st.column_config.NumberColumn(min_value=0)
+        col_config["ITEMS"] = st.column_config.TextColumn(disabled=True)
         
         if hasattr(st, "data_editor"):
-            edited_df = st.data_editor(df_grouped, key="final_editor")
+            edited_df = st.data_editor(df_grouped, key="final_editor", column_config=col_config)
         else:
-            edited_df = st.experimental_data_editor(df_grouped, key="final_editor")
+            edited_df = st.experimental_data_editor(df_grouped, key="final_editor", column_config=col_config)
         
         validated_df = validate_edited_data(edited_df, global_years)
         if validated_df is None:
             return
         
         df_final = append_totals_with_column(validated_df)
-        # Visualizamos la tabla validada con totales usando AgGrid
-        gb_final = GridOptionsBuilder.from_dataframe(df_final)
-        gb_final.configure_default_column(autoWidth=True, wrapText=True)
-        gridOptions_final = gb_final.build()
-        st.markdown("### Planilla Final con Totales")
-        AgGrid(df_final, gridOptions=gridOptions_final, fit_columns_on_grid_load=True)
+        df_formatted = df_final.copy()
+        for col in df_formatted.columns:
+            if col.isdigit() or col == "Total":
+                df_formatted[col] = df_formatted[col].apply(format_miles_pesos)
         
-        st.markdown("### Gasto Convertido a la Moneda Seleccionada")
+        st.dataframe(df_formatted, use_container_width=True)
+        
+        st.markdown("### Anualización de la Inversión")
         conversion_factors = load_conversion_factors()
         if conversion_factors is None:
             return
@@ -229,12 +248,12 @@ def main():
         
         df_converted = convert_expense_dataframe(validated_df, int(dest_moneda), conversion_factors)
         df_converted_final = append_totals_with_column(df_converted)
+        df_converted_formatted = df_converted_final.copy()
+        for col in df_converted_formatted.columns:
+            if col.isdigit() or col == "Total":
+                df_converted_formatted[col] = df_converted_formatted[col].apply(format_miles_pesos)
         
-        # Visualizamos la tabla convertida usando AgGrid con autoajuste de columnas
-        gb_converted = GridOptionsBuilder.from_dataframe(df_converted_final)
-        gb_converted.configure_default_column(autoWidth=True, wrapText=True)
-        gridOptions_converted = gb_converted.build()
-        AgGrid(df_converted_final, gridOptions=gridOptions_converted, fit_columns_on_grid_load=True)
+        st.dataframe(df_converted_formatted, use_container_width=True)
 
 if __name__ == '__main__':
     main()
