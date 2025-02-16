@@ -23,7 +23,10 @@ def load_conversion_factors():
     El resultado es un diccionario anidado con la forma:
       { año_base: { año_destino: factor, ... }, ... }
     """
-    df_factors = pd.read_csv("factores_conversion.csv", index_col=0)
+    try:
+        df_factors = pd.read_csv("factores_conversion.csv", index_col=0, encoding="utf-8-sig")
+    except UnicodeDecodeError:
+        df_factors = pd.read_csv("factores_conversion.csv", index_col=0, encoding="latin1")
     # Asegurarse de que tanto índices como columnas sean enteros
     df_factors.index = df_factors.index.astype(int)
     df_factors.columns = df_factors.columns.astype(int)
