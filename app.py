@@ -17,38 +17,31 @@ def load_base_data():
 @st.cache_data
 def load_conversion_factors():
     """
-    Carga y procesa el archivo 'factores_conversion.csv' con el siguiente formato:
+    Carga y procesa el archivo 'factores_conversion.csv' siguiendo estos pasos:
     
-    - Delimitador: punto y coma (;)
-    - Codificación: latin-1 (ISO-8859-1)
-    
-    Estructura:
-      * Primera fila (cabecera):
-          - La primera celda contiene un encabezado descriptivo (ej.: "AÑO Base")
-          - Las siguientes celdas contienen los años de destino (ej.: 2015, 2016, ..., 2025)
-      * Filas siguientes:
-          - Primera columna: Año base (número entero sin espacios, ej.: 2011, 2012, ..., 2024)
-          - Columnas siguientes: Factores de conversión correspondientes a cada año de destino,
-            con valores numéricos que pueden usar coma (,) como separador decimal.
-    
-    Se construye un diccionario de factores con la siguiente estructura:
-       { año_base: { año_destino: factor, ... }, ... }
-    
-    Finalmente, se convierte a un DataFrame donde el índice es el año base y las columnas
-    son los años de destino.
+    1. Abre el archivo usando open() con newline='' y encoding="latin-1".
+    2. Lee el archivo usando csv.reader con delimiter="\t" (según el error, los campos están separados por tabulaciones).
+    3. La primera fila es la cabecera:
+         - La primera celda es un encabezado descriptivo (ej.: "AÑO Base").
+         - Las siguientes celdas son los años de destino.
+    4. Itera sobre las filas de datos:
+         - Convierte el primer elemento (año base) a entero.
+         - Para cada valor de las columnas siguientes, elimina espacios, reemplaza la coma decimal por punto y convierte a float.
+    5. Construye un diccionario y luego lo convierte a DataFrame.
     """
     factors = {}
     try:
+        # Cambia el delimitador a "\t" porque los errores indican que se usan tabulaciones
         with open("factores_conversion.csv", newline='', encoding="latin-1") as csvfile:
-            reader = csv.reader(csvfile, delimiter=";")
-            # Leer la cabecera sin convertirla a números.
+            reader = csv.reader(csvfile, delimiter="\t")
+            # Leer la cabecera (no se convierte a números)
             header = next(reader)
             # La primera celda es descriptiva; las siguientes son los años de destino.
             destination_years = [col.strip() for col in header[1:]]
             for row in reader:
                 if not row:
                     continue  # omitir filas vacías
-                # La primera columna es el año base: convertir a entero.
+                # El primer elemento debe ser el año base: eliminar espacios y convertir a entero.
                 try:
                     base_year = int(row[0].strip())
                 except Exception as e:
@@ -56,21 +49,21 @@ def load_conversion_factors():
                     return None
                 subdict = {}
                 for i, val in enumerate(row[1:], start=1):
-                    # Eliminar espacios y reemplazar coma decimal por punto.
+                    # Eliminar espacios y reemplazar coma por punto
                     val_clean = val.strip().replace(",", ".")
                     try:
                         factor = float(val_clean)
                     except Exception as e:
                         st.error(f"Error al convertir el valor '{val}' en la fila con año base {base_year}: {e}")
                         return None
-                    # Usamos el año de destino correspondiente de la cabecera.
+                    # Asignar el factor al año de destino correspondiente
                     subdict[destination_years[i-1]] = factor
                 factors[base_year] = subdict
     except Exception as e:
         st.error(f"Error al leer 'factores_conversion.csv': {e}")
         return None
 
-    # Convertir el diccionario a DataFrame:
+    # Convertir el diccionario a DataFrame
     df_factors = pd.DataFrame.from_dict(factors, orient="index")
     df_factors.index.name = header[0].strip()
     return df_factors
@@ -221,7 +214,6 @@ def main():
             return
         
         st.markdown("### Gasto Real no Ajustado Cuadro Completo (Valores Originales)")
-        # Configuración para el editor: columnas numéricas editables y 'ITEMS' bloqueado
         col_config = {}
         for y in global_years:
             col = str(y)
@@ -238,7 +230,6 @@ def main():
         if validated_df is None:
             return
         
-        # Agregar totales
         df_final = append_totals_with_column(validated_df)
         df_formatted = df_final.copy()
         for col in df_formatted.columns:
@@ -247,7 +238,6 @@ def main():
         
         st.dataframe(df_formatted, use_container_width=True)
         
-        # --- Conversión a la moneda (año de destino) seleccionada ---
         st.markdown("### Gasto Convertido a la Moneda Seleccionada")
         conversion_factors = load_conversion_factors()
         if conversion_factors is None:
