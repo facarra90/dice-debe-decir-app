@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 import csv
-from datetime import datetime
 
 # Configurar la página para que use el ancho completo
 st.set_page_config(layout="wide")
@@ -161,7 +160,10 @@ def append_totals_with_column(df):
     
     totals = {}
     for col in df_copy.columns:
-        totals[col] = df_copy[col].sum() if col in numeric_cols or col == "Total" else ""
+        if col in numeric_cols or col == "Total":
+            totals[col] = df_copy[col].sum()
+        else:
+            totals[col] = ""
     totals["ITEMS"] = "Total"
     totals_df = pd.DataFrame([totals])
     combined = pd.concat([df_copy, totals_df], ignore_index=True)
@@ -193,34 +195,60 @@ def convert_expense_dataframe(df, dest_year, conversion_factors):
             converted_df[col] = df[col] * factor / 1000
     return converted_df
 
-def generate_solicitud_financiamiento():
+def create_solicitud_financiamiento(df_conv):
     """
-    Genera la tabla "SOLICITUD DE FINANCIAMIENTO" con los siguientes campos:
-      - Fuente: Siempre "F.N.D.R."
-      - Asignación Presupuestaria: Ítems de financiamiento (ej.: Estudios, Obras, Administración, etc.)
-      - Moneda: Siempre "M$"
-      - Pagado al 31/12/2024: Montos pagados hasta esa fecha.
-      - Solicitado para el año 2025: Montos solicitados para el año 2025.
-      - Solicitado años siguientes: Montos proyectados para los años posteriores a 2025.
-      - Costo Total: Suma de las tres columnas anteriores.
+    A partir del DataFrame de la inversión anualizada en moneda (df_conv), genera la tabla
+    SOLICITUD DE FINANCIAMIENTO con las siguientes columnas:
+    
+      - Fuente: siempre "F.N.D.R."
+      - Asignación Presupuestaria (Item): contenido de "ITEMS"
+      - Moneda: siempre "M$"
+      - Pagado al 31/12/2024: suma de los años anteriores a 2025 (los años < 2025)
+      - Solicitado para el año 2025: valor de la columna "2025"
+      - Solicitado años siguientes: suma de los años mayores a 2025 (años > 2025)
+      - Costo Total: suma de las tres columnas anteriores.
+    
+    Además, agrega una fila total al final que sume los campos numéricos.
     """
-    # Datos de ejemplo; puedes modificar o ampliar estos ítems según el proyecto real.
-    data = [
-        {"Asignación Presupuestaria": "Estudios", "Pagado al 31/12/2024": 1000000, "Solicitado para el año 2025": 500000, "Solicitado años siguientes": 250000},
-        {"Asignación Presupuestaria": "Obras", "Pagado al 31/12/2024": 3000000, "Solicitado para el año 2025": 1500000, "Solicitado años siguientes": 750000},
-        {"Asignación Presupuestaria": "Administración", "Pagado al 31/12/2024": 500000, "Solicitado para el año 2025": 250000, "Solicitado años siguientes": 125000},
-    ]
-    df = pd.DataFrame(data)
-    df["Fuente"] = "F.N.D.R."
-    df["Moneda"] = "M$"
-    df["Costo Total"] = df["Pagado al 31/12/2024"] + df["Solicitado para el año 2025"] + df["Solicitado años siguientes"]
-    # Reordenar las columnas
-    df = df[["Fuente", "Asignación Presupuestaria", "Moneda", "Pagado al 31/12/2024", 
-             "Solicitado para el año 2025", "Solicitado años siguientes", "Costo Total"]]
-    # Formatear las columnas monetarias
+    # Seleccionar solo las columnas que sean años (en formato dígito) y la columna "ITEMS"
+    year_cols = [col for col in df_conv.columns if col.isdigit()]
+    
+    # Se crea la tabla base usando la información de cada fila
+    data = []
+    for idx, row in df_conv.iterrows():
+        # Si la fila es la fila total (por ejemplo, si "ITEMS" es "Total"), se procesará al final.
+        if str(row["ITEMS"]).strip().upper() == "TOTAL":
+            continue
+        # Sumar los años anteriores a 2025
+        pagado = sum(row[col] for col in year_cols if int(col) < 2025)
+        # Valor para 2025
+        solicitado_2025 = row["2025"] if "2025" in row and pd.notnull(row["2025"]) else 0
+        # Sumar los años siguientes a 2025
+        solicitado_siguientes = sum(row[col] for col in year_cols if int(col) > 2025)
+        # Costo Total
+        costo_total = pagado + solicitado_2025 + solicitado_siguientes
+        data.append({
+            "Fuente": "F.N.D.R.",
+            "Asignación Presupuestaria (Item)": row["ITEMS"],
+            "Moneda": "M$",
+            "Pagado al 31/12/2024": pagado,
+            "Solicitado para el año 2025": solicitado_2025,
+            "Solicitado años siguientes": solicitado_siguientes,
+            "Costo Total": costo_total
+        })
+        
+    df_solicitud = pd.DataFrame(data)
+    
+    # Calcular la fila de totales para las columnas numéricas
+    total_row = {
+        "Fuente": "",
+        "Asignación Presupuestaria (Item)": "Total",
+        "Moneda": ""
+    }
     for col in ["Pagado al 31/12/2024", "Solicitado para el año 2025", "Solicitado años siguientes", "Costo Total"]:
-        df[col] = df[col].apply(format_miles_pesos)
-    return df
+        total_row[col] = df_solicitud[col].sum()
+    df_solicitud = pd.concat([df_solicitud, pd.DataFrame([total_row])], ignore_index=True)
+    return df_solicitud
 
 def main():
     st.title("Gasto Real no Ajustado Cuadro Completo")
@@ -268,26 +296,13 @@ def main():
         
         st.dataframe(df_formatted, use_container_width=True)
         
-        # Cargar los factores de conversión
+        st.markdown("### Gasto Convertido a la Moneda Seleccionada")
         conversion_factors = load_conversion_factors()
         if conversion_factors is None:
             return
         
         available_moneda = sorted(conversion_factors.columns, key=lambda x: int(x))
-        # Seleccionar por defecto el año actual si está en la lista, de lo contrario, usar el primero.
-        default_year = str(datetime.now().year)
-        if default_year in available_moneda:
-            default_index = available_moneda.index(default_year)
-        else:
-            default_index = 0
-        dest_moneda = st.sidebar.selectbox(
-            "Seleccione la moneda de destino (año de conversión):",
-            available_moneda,
-            index=default_index
-        )
-        
-        # Actualizar el título incluyendo el año seleccionado
-        st.markdown(f"### Anualización de la Inversión en Moneda {dest_moneda}")
+        dest_moneda = st.sidebar.selectbox("Seleccione la moneda de destino (año de conversión):", available_moneda)
         
         df_converted = convert_expense_dataframe(validated_df, int(dest_moneda), conversion_factors)
         df_converted_final = append_totals_with_column(df_converted)
@@ -298,10 +313,15 @@ def main():
         
         st.dataframe(df_converted_formatted, use_container_width=True)
         
-        # Mostrar la tabla SOLICITUD DE FINANCIAMIENTO
+        # Nueva tabla: SOLICITUD DE FINANCIAMIENTO
         st.markdown("### SOLICITUD DE FINANCIAMIENTO")
-        df_financiamiento = generate_solicitud_financiamiento()
-        st.table(df_financiamiento)
+        # Se genera la tabla a partir del DataFrame convertido (sin la fila total, para evitar duplicados)
+        # Se toma df_converted ya que contiene los valores en moneda convertida (M$)
+        df_solicitud = create_solicitud_financiamiento(df_converted)
+        # Opcional: formatear los números de la nueva tabla
+        for col in ["Pagado al 31/12/2024", "Solicitado para el año 2025", "Solicitado años siguientes", "Costo Total"]:
+            df_solicitud[col] = df_solicitud[col].apply(format_miles_pesos)
+        st.dataframe(df_solicitud, use_container_width=True)
 
 if __name__ == '__main__':
     main()
