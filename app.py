@@ -4,15 +4,6 @@ import pandas as pd
 # Configurar la página para que use todo el ancho disponible
 st.set_page_config(layout="wide")
 
-# Definir la tabla de factores de conversión
-# Ejemplo: Para cada año base (2011 a 2024), se genera un diccionario interno para los años de destino
-# La fórmula aplicada es: factor = 1 + 0.05 * (año_destino - año_base)
-# (Este es solo un ejemplo; reemplaza los valores según tus requerimientos)
-conversion_factors = {
-    base_year: {target: 1 + 0.05 * (target - base_year) for target in range(2011, 2025)}
-    for base_year in range(2011, 2025)
-}
-
 # Inicializar la variable de estado para mantener visible la planilla
 if "planilla_generada" not in st.session_state:
     st.session_state.planilla_generada = False
@@ -21,6 +12,22 @@ if "planilla_generada" not in st.session_state:
 def load_base_data():
     # Cargar la base de datos desde un archivo Excel
     return pd.read_excel("BASE DE DATOS.xlsx")
+
+@st.cache_data
+def load_conversion_factors():
+    """
+    Carga la tabla de factores de conversión desde un archivo CSV.
+    Se espera que el CSV tenga la siguiente estructura:
+      - La primera columna (index) corresponde al año base.
+      - Las columnas restantes corresponden a los años de destino.
+    El resultado es un diccionario anidado con la forma:
+      { año_base: { año_destino: factor, ... }, ... }
+    """
+    df_factors = pd.read_csv("factores_conversion.csv", index_col=0)
+    # Asegurarse de que tanto índices como columnas sean enteros
+    df_factors.index = df_factors.index.astype(int)
+    df_factors.columns = df_factors.columns.astype(int)
+    return df_factors.to_dict(orient="index")
 
 def format_miles_pesos(x):
     """
@@ -132,7 +139,8 @@ def convert_table(df, conversion_year, conversion_factors):
     Genera un nuevo DataFrame con los valores convertidos a la moneda del año indicado.
     Para cada columna de año:
       - Se obtiene el factor de conversión para el par (año de la columna, año de destino).
-      - Si el año base no existe en la tabla de factores, se utiliza el factor del máximo año base disponible.
+      - Si el año base no existe o no tiene factor para el año destino, se utiliza el factor
+        del máximo año disponible.
       - Se aplica la conversión: (valor * factor) / 1000.
     Se recalcula la columna "Total" como la suma de los años convertidos y se formatea la salida.
     """
@@ -142,15 +150,15 @@ def convert_table(df, conversion_year, conversion_factors):
     
     for col in year_cols:
         base_year = int(col)
-        # Buscar el factor correspondiente
+        # Buscar el factor correspondiente en la tabla cargada
         if base_year in conversion_factors:
             factor = conversion_factors[base_year].get(conversion_year)
             if factor is None:
-                # Si no se encuentra el factor para el año de destino, se usa el factor del máximo año de destino disponible
+                # Si no se encuentra el factor para el año de destino, usar el factor del máximo año destino disponible
                 max_target = max(conversion_factors[base_year].keys())
                 factor = conversion_factors[base_year][max_target]
         else:
-            # Si el año de la columna no está en la tabla, se usa el factor del máximo año base disponible
+            # Si el año de la columna no está en la tabla, usar el factor del máximo año base disponible
             max_base = max(conversion_factors.keys())
             factor = conversion_factors[max_base].get(conversion_year)
             if factor is None:
@@ -175,6 +183,7 @@ def convert_table(df, conversion_year, conversion_factors):
 def main():
     st.title("Gasto Real no Ajustado Cuadro Completo")
     df_base = load_base_data()
+    conversion_factors = load_conversion_factors()  # Cargar factores desde el CSV
     
     # Filtros en la barra lateral
     st.sidebar.header("Filtrar Datos")
