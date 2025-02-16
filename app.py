@@ -250,9 +250,8 @@ def main():
             edited_original_df = st.data_editor(df_grouped, key="original_editor")
         else:
             edited_original_df = st.experimental_data_editor(df_grouped, key="original_editor")
-        # Asegurarse de tomar los datos actualizados (si existen) desde st.session_state
-        if "original_editor" in st.session_state:
-            edited_original_df = st.session_state["original_editor"]
+        # Convertir a DataFrame (por si el widget retorna otro formato)
+        edited_original_df = pd.DataFrame(edited_original_df)
         
         # Sección 1.2: Tabla con Totales (incluye columna "Total" y fila final con totales)
         st.markdown("### Gasto Real no Ajustado Cuadro Completo")
