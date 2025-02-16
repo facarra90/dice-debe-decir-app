@@ -1,27 +1,85 @@
 import streamlit as st
 import pandas as pd
+import datetime
+import io
+import csv
+from openpyxl.utils import get_column_letter
 
-# Inicializar la variable de estado para mantener visible la planilla
-if "planilla_generada" not in st.session_state:
-    st.session_state.planilla_generada = False
+# Configuración de la página para usar todo el ancho disponible
+st.set_page_config(layout="wide", page_title="Dice debe Decir - Aplicación de Gasto")
+
+# ----- FUNCIONES DE CARGA DE DATOS -----
 
 @st.cache_data
 def load_base_data():
-    # Cargar la base de datos desde un archivo Excel
+    """Carga la base de datos desde el archivo Excel."""
     return pd.read_excel("BASE DE DATOS.xlsx")
 
-def format_miles_pesos(x):
+@st.cache_data
+def load_conversion_factors():
+    """Carga los factores de conversión desde el archivo CSV."""
+    conversion = {}
+    with open("factores_conversion.csv", newline='', encoding="latin-1") as csvfile:
+        reader = csv.reader(csvfile, delimiter="\t")
+        headers = next(reader)
+        year_headers = [int(h.strip()) for h in headers[1:]]
+        for row in reader:
+            base_year = int(row[0].strip())
+            conversion[base_year] = {}
+            for idx, cell in enumerate(row[1:]):
+                try:
+                    value = float(cell.strip().replace(",", "."))
+                except ValueError:
+                    value = None
+                conversion[base_year][year_headers[idx]] = value
+    return conversion
+
+# ----- FORMATO NUMÉRICO PERSONALIZADO -----
+
+def format_number_custom(x):
     """
-    Formatea el número redondeándolo a entero y separando los miles con punto.
-    Ejemplo: 1234567.89 -> "1.234.568"
+    Convierte un número a entero sin decimales y lo formatea con puntos como separador de miles.
+    Ejemplo: 9182936 se mostrará como "9.182.936" y 0 como "0".
     """
     try:
         return f"{int(round(x)):,}".replace(",", ".")
     except Exception:
         return x
 
+def style_df_contabilidad(df):
+    """
+    Devuelve un objeto Styler que aplica el formato contable:
+      - Los valores numéricos se formatean sin decimales y con puntos como separador de miles.
+      - Toda la tabla se alinea a la izquierda.
+    """
+    styler = df.style.format(lambda x: format_number_custom(x) if isinstance(x, (int, float)) else x)
+    styler = styler.set_properties(**{'text-align': 'left'})
+    # Alinear los encabezados a la izquierda
+    styler = styler.set_table_styles([{'selector': 'th', 'props': [('text-align', 'left')]}])
+    return styler
+
+# ----- FUNCION PARA AGREGAR TOTALES (fila y columna) -----
+
+def append_totals(df):
+    """
+    Agrega una columna "Total" (suma de las columnas numéricas) a cada fila y
+    añade una fila final "Total" con la suma de cada columna numérica.
+    Las columnas no numéricas quedan vacías en la fila total.
+    """
+    df = df.copy()
+    numeric_cols = df.select_dtypes(include=["number"]).columns
+    df["Total"] = df[numeric_cols].sum(axis=1)
+    total_row = df[numeric_cols].sum(axis=0)
+    total_row["Total"] = total_row.sum()
+    for col in df.columns.difference(numeric_cols):
+        total_row[col] = ""
+    total_row.name = "Total"
+    df = pd.concat([df, total_row.to_frame().T])
+    return df
+
+# ----- FILTRADO Y GENERACIÓN DE LA PLANILLA -----
+
 def get_filtered_data(df_base, codigo_bip, etapa, anio_termino):
-    # Normalizar los filtros
     codigo_bip_norm = str(codigo_bip).strip().upper()
     etapa_norm = str(etapa).strip().upper()
     df_filtered = df_base[
@@ -31,19 +89,15 @@ def get_filtered_data(df_base, codigo_bip, etapa, anio_termino):
     if df_filtered.empty:
         st.error("No se encontraron datos para el CODIGO BIP y ETAPA seleccionados.")
         return None, None, None
-
-    # Quitar espacios en los nombres de columnas
     df_filtered.columns = [str(col).strip() for col in df_filtered.columns]
-    # Seleccionar columnas que representan años (2011 a 2024)
     expense_cols = [col for col in df_filtered.columns if col.isdigit() and 2011 <= int(col) <= 2024]
-    # Agrupar por "ITEMS" y sumar los gastos de cada año
-    df_grouped = df_filtered.groupby("ITEMS")[expense_cols].sum().reset_index()
-
-    # Determinar el primer año en el que se registra gasto
+    df_grouped = df_filtered.groupby("ITEMS")[expense_cols].sum()
     sorted_years = sorted([int(col) for col in expense_cols])
     start_year = None
     for y in sorted_years:
-        if str(y) in df_grouped.columns and df_grouped[str(y)].sum() > 0:
+        col = str(y)
+        col_sum = df_grouped[col].sum() if col in df_grouped.columns else 0
+        if col_sum > 0:
             start_year = y
             break
     if start_year is None:
@@ -52,74 +106,117 @@ def get_filtered_data(df_base, codigo_bip, etapa, anio_termino):
     if anio_termino < start_year:
         st.error("El AÑO DE TERMINO debe ser mayor o igual al año de inicio del gasto.")
         return None, None, None
-
-    # Crear la lista de años desde el inicio hasta el AÑO DE TERMINO
     global_years = list(range(start_year, anio_termino + 1))
-    # Forzar la inclusión del año 2025
+    # Forzar la inclusión del año 2025 si no está
     if 2025 not in global_years:
         global_years.append(2025)
         global_years.sort()
-
-    # Asegurar que exista una columna para cada año en la lista
     cols = [str(y) for y in global_years]
     for col in cols:
         if col not in df_grouped.columns:
             df_grouped[col] = 0
-
-    # Reordenar las columnas: "ITEMS" seguido de los años en orden
-    df_grouped = df_grouped[["ITEMS"] + cols].sort_values("ITEMS")
-    # Convertir las columnas de año a valores numéricos
-    for col in df_grouped.columns:
-        if col.isdigit():
-            df_grouped[col] = pd.to_numeric(df_grouped[col], errors="coerce").fillna(0)
+    # Reordenar las columnas: se mantienen en el orden de la lista de años
+    df_grouped = df_grouped[cols].sort_index()
     return df_grouped, global_years, df_filtered
 
-def validate_edited_data(df, global_years):
-    if df.empty:
-        st.error("La tabla no puede estar vacía.")
-        return None
-    if "ITEMS" not in df.columns:
-        st.error("La columna 'ITEMS' es obligatoria y no puede ser eliminada.")
-        return None
-    for y in global_years:
-        col = str(y)
-        if col in df.columns:
-            try:
-                df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
-            except Exception as e:
-                st.error(f"Error al convertir la columna {col}: {e}")
-                return None
-    return df
+def compute_conversion_table(original_df, global_years, conversion_factors, target_conversion_year):
+    conv_df = original_df.copy().astype(float)
+    for col in conv_df.columns:
+        year = int(col)
+        base_key = year if year in conversion_factors else max(conversion_factors.keys())
+        available_years = sorted(conversion_factors[base_key].keys())
+        target_year_use = target_conversion_year if target_conversion_year <= available_years[-1] else available_years[-1]
+        factor = conversion_factors[base_key][target_year_use]
+        conv_df[col] = (conv_df[col] * factor) / 1000.0
+    return conv_df
 
-def append_totals_with_column(df):
-    """
-    Agrega una columna "Total" a cada fila con la suma de los valores numéricos (años),
-    y luego añade una fila de totales que sume cada columna, incluida la columna "Total".
-    """
-    df_copy = df.copy()
-    # Identificar las columnas de años (números)
-    numeric_cols = [col for col in df_copy.columns if col.isdigit()]
-    # Agregar columna "Total" (suma de los valores de las columnas numéricas)
-    df_copy["Total"] = df_copy[numeric_cols].sum(axis=1)
-    
-    # Crear una fila con los totales de cada columna numérica y de la columna "Total"
-    totals = {}
-    for col in df_copy.columns:
-        if col in numeric_cols or col == "Total":
-            totals[col] = df_copy[col].sum()
-        else:
-            totals[col] = ""
-    totals["ITEMS"] = "Total"
-    totals_df = pd.DataFrame([totals])
-    # Concatenar la fila de totales al DataFrame original
-    combined = pd.concat([df_copy, totals_df], ignore_index=True)
-    return combined
+def compute_programming_table(original_df, global_years, conversion_factors, target_prog_year):
+    start_year = global_years[0]
+    if target_prog_year >= start_year:
+        st.error("El año de conversión para la Programación debe ser menor que el año de inicio.")
+        return None
+    prog_df = original_df.copy().astype(float)
+    for col in prog_df.columns:
+        year = int(col)
+        base_key = year if year in conversion_factors else max(conversion_factors.keys())
+        available_years = sorted(conversion_factors[base_key].keys())
+        target_use = available_years[0] if target_prog_year < available_years[0] else target_prog_year
+        factor = conversion_factors[base_key][target_use]
+        prog_df[col] = (prog_df[col] * factor) / 1000.0
+    return prog_df
+
+def compute_cuadro_extra(conv_df, global_years):
+    if global_years is None or len(global_years) == 0:
+        st.error("No se definieron años globales para calcular el cuadro extra.")
+        return pd.DataFrame()
+    current_year = datetime.datetime.now().year
+    extra_data = []
+    for item in conv_df.index:
+        pagado = sum(conv_df.loc[item, str(y)] for y in global_years if y <= (current_year - 1))
+        sol2025 = conv_df.loc[item, str(current_year)] if str(current_year) in conv_df.columns else 0
+        sol_siguientes = sum(conv_df.loc[item, str(y)] for y in global_years if y > current_year)
+        total = pagado + sol2025 + sol_siguientes
+        extra_data.append({
+            "Fuente": "F.N.D.R.",
+            "Asignación Presupuestaria": item,
+            "Moneda": "M$",
+            "Pagado al 31/12/2024": pagado,
+            "Solicitado para el año 2025": sol2025,
+            "Solicitado años siguientes": sol_siguientes,
+            "Costo Total": total
+        })
+    extra_df = pd.DataFrame(extra_data).set_index("Asignación Presupuestaria")
+    return extra_df
+
+def export_to_excel(original_df, conv_df, extra_df, prog_df, selected_codigo_bip):
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+        original_df.to_excel(writer, sheet_name="Gasto Real", startrow=2)
+        conv_df.to_excel(writer, sheet_name="Conversión", startrow=2)
+        extra_df.to_excel(writer, sheet_name="SOLICITUD DE FINANCIAMIENTO", startrow=2)
+        if prog_df is not None:
+            prog_df.to_excel(writer, sheet_name="Programación", startrow=2)
+        workbook = writer.book
+        from openpyxl.styles import Font, Alignment
+        title_font = Font(bold=True, size=14)
+        center_alignment = Alignment(horizontal="center")
+        sheets = {
+            "Gasto Real": original_df,
+            "Conversión": conv_df,
+            "SOLICITUD DE FINANCIAMIENTO": extra_df,
+            "Programación": prog_df if prog_df is not None else pd.DataFrame()
+        }
+        for sheet_name, df in sheets.items():
+            if sheet_name not in writer.sheets:
+                continue
+            worksheet = writer.sheets[sheet_name]
+            ncols = df.shape[1] + 1 if sheet_name in ["Gasto Real", "Conversión", "Programación"] else df.shape[1]
+            last_col_letter = get_column_letter(ncols)
+            worksheet.merge_cells(f"A1:{last_col_letter}1")
+            title_text = f"Proyecto: {selected_codigo_bip}"
+            cell = worksheet["A1"]
+            cell.value = title_text
+            cell.font = title_font
+            cell.alignment = center_alignment
+            for col in worksheet.columns:
+                max_length = 0
+                col_letter = col[0].column_letter
+                for cell in col:
+                    try:
+                        if cell.value:
+                            max_length = max(max_length, len(str(cell.value)))
+                    except:
+                        pass
+                adjusted_width = (max_length + 2)
+                worksheet.column_dimensions[col_letter].width = adjusted_width
+        writer.save()
+    return output.getvalue()
 
 def main():
-    st.title("Gasto Real no Ajustado Cuadro Completo")
+    st.title("Dice debe Decir - Aplicación de Gasto")
     df_base = load_base_data()
+    conversion_factors = load_conversion_factors()
     
-    # Filtros en la barra lateral
     st.sidebar.header("Filtrar Datos")
     codigo_bip_list = sorted(df_base["CODIGO BIP"].dropna().unique().tolist())
     selected_codigo_bip = st.sidebar.selectbox("Seleccione el CODIGO BIP:", codigo_bip_list)
@@ -129,39 +226,86 @@ def main():
                                            min_value=2011, max_value=2100, value=2024, step=1)
     
     if st.sidebar.button("Generar Planilla"):
-        st.session_state.planilla_generada = True
-        
-    if st.session_state.planilla_generada:
-        df_grouped, global_years, _ = get_filtered_data(df_base, selected_codigo_bip, selected_etapa, anio_termino)
+        # Obtenemos la planilla filtrada y agrupada
+        df_grouped, global_years, df_filtered = get_filtered_data(df_base, selected_codigo_bip, selected_etapa, anio_termino)
         if df_grouped is None:
             return
         
-        st.markdown("### Gasto Real no Ajustado Cuadro Completo")
-        # Configuración para el editor: se permite editar las columnas numéricas y se bloquea "ITEMS"
-        col_config = {}
-        for y in global_years:
-            col = str(y)
-            if col in df_grouped.columns:
-                col_config[col] = st.column_config.NumberColumn(min_value=0)
-        col_config["ITEMS"] = st.column_config.TextColumn(disabled=True)
+        nombre_proyecto = df_filtered["NOMBRE"].iloc[0] if "NOMBRE" in df_filtered.columns else "Proyecto sin nombre"
+        with st.container():
+            st.markdown(
+                f"""
+                <div style="padding:5px; background-color:#f0f0f0; border:1px solid #ccc; border-radius:5px; font-size:14px; margin-bottom:10px;">
+                    <b>Proyecto:</b> {nombre_proyecto} &nbsp;&nbsp;&nbsp;
+                    <b>Etapa:</b> {selected_etapa} &nbsp;&nbsp;&nbsp;
+                    <b>Código BIP:</b> {selected_codigo_bip}
+                </div>
+                """, unsafe_allow_html=True
+            )
         
-        # Mostrar la tabla editable
+        # Sección 1: Gasto Real no Ajustado (editor interactivo)
+        st.markdown("### Gasto Real no Ajustado")
+        st.write("Edite los valores según corresponda:")
         if hasattr(st, "data_editor"):
-            edited_df = st.data_editor(df_grouped, key="final_editor", column_config=col_config)
+            edited_original_df = st.data_editor(df_grouped, key="original_editor")
         else:
-            edited_df = st.experimental_data_editor(df_grouped, key="final_editor", column_config=col_config)
+            edited_original_df = st.experimental_data_editor(df_grouped, key="original_editor")
+        # Asegurarse de tomar los datos actualizados (si existen) desde st.session_state
+        if "original_editor" in st.session_state:
+            edited_original_df = st.session_state["original_editor"]
         
-        validated_df = validate_edited_data(edited_df, global_years)
-        if validated_df is None:
-            return
+        # Sección 1.2: Tabla con Totales (incluye columna "Total" y fila final con totales)
+        st.markdown("### Gasto Real no Ajustado Cuadro Completo")
+        original_df_totals = append_totals(edited_original_df)
+        st.table(style_df_contabilidad(original_df_totals))
         
-        # Agregar columna "Total" a cada fila y la fila de totales final
-        df_final = append_totals_with_column(validated_df)
+        # Sección 2: Conversión a Moneda Pesos (M$)
+        st.markdown("### Conversión a Moneda Pesos (M$)")
+        target_conversion_year = st.number_input("Convertir a año:",
+                                                   min_value=2011, max_value=2100,
+                                                   value=datetime.datetime.now().year, step=1, key="conv_year")
+        conv_df = compute_conversion_table(edited_original_df, global_years, conversion_factors, target_conversion_year)
+        conv_df_totals = append_totals(conv_df)
+        st.table(style_df_contabilidad(conv_df_totals))
         
-        # Aplicar el formato de "Miles de Pesos" sin decimales (se usa Pandas Styler para la visualización)
-        df_styled = df_final.style.format(format_miles_pesos)
+        # Sección 3: SOLICITUD DE FINANCIAMIENTO
+        st.markdown("### SOLICITUD DE FINANCIAMIENTO")
+        extra_df = compute_cuadro_extra(conv_df, global_years)
+        # Agregar fila de totales para las columnas específicas de la solicitud
+        totales = {
+            "Pagado al 31/12/2024": extra_df["Pagado al 31/12/2024"].sum(),
+            "Solicitado para el año 2025": extra_df["Solicitado para el año 2025"].sum(),
+            "Solicitado años siguientes": extra_df["Solicitado años siguientes"].sum(),
+            "Costo Total": extra_df["Costo Total"].sum()
+        }
+        totals_row = pd.DataFrame({
+            "Fuente": [""],
+            "Moneda": [""],
+            "Pagado al 31/12/2024": [totales["Pagado al 31/12/2024"]],
+            "Solicitado para el año 2025": [totales["Solicitado para el año 2025"]],
+            "Solicitado años siguientes": [totales["Solicitado años siguientes"]],
+            "Costo Total": [totales["Costo Total"]]
+        }, index=["Total"])
+        extra_df = pd.concat([extra_df, totals_row])
+        st.table(style_df_contabilidad(extra_df))
         
-        st.table(df_styled)
+        # Sección 4: Programación en Moneda Original
+        st.markdown("### Programación en Moneda Original")
+        target_prog_year = st.number_input("Convertir a año (Programación):",
+                                             min_value=1900, max_value=2100,
+                                             value=2010, step=1, key="prog_year")
+        prog_df = compute_programming_table(edited_original_df, global_years, conversion_factors, target_prog_year)
+        if prog_df is not None:
+            prog_df_totals = append_totals(prog_df)
+            st.table(style_df_contabilidad(prog_df_totals))
+        
+        # Sección 5: Exportar a Excel
+        st.markdown("### Exportar a Excel")
+        if st.button("Exportar a Excel"):
+            excel_data = export_to_excel(edited_original_df, conv_df, extra_df, prog_df, selected_codigo_bip)
+            st.download_button(label="Descargar Excel", data=excel_data,
+                               file_name="exported_data.xlsx",
+                               mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 if __name__ == '__main__':
     main()
