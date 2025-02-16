@@ -16,49 +16,52 @@ def load_base_data():
 @st.cache_data
 def load_conversion_factors():
     """
-    Carga y procesa el archivo 'factores_conversion.csv' que contiene los factores de conversión.
-
-    Se asume que el CSV está delimitado por punto y coma (;). Si tu archivo utiliza otro delimitador,
-    ajusta el parámetro sep.
-
-    Estructura del CSV:
-      - Primera fila: cabecera con la etiqueta (por ejemplo, "AÑO Base") en la primera celda
-        y los años de destino en las siguientes.
-      - Filas siguientes: cada fila tiene el año base (primera columna) y los factores de conversión
-        en las columnas restantes. Los valores numéricos pueden tener comas como separador decimal.
-
+    Carga y procesa el archivo 'factores_conversion.csv' con el siguiente formato:
+    
+    - Delimitador: punto y coma (;)
+    - Codificación: latin-1 (ISO-8859-1)
+    
+    Estructura:
+      * Primera fila (cabecera):
+          - La primera celda contiene un encabezado descriptivo (ej.: "AÑO Base")
+          - Las siguientes celdas contienen los años de destino (ej.: 2015, 2016, ..., 2025)
+      * Filas siguientes:
+          - Primera columna: Año base (número entero sin espacios, ej.: 2011, 2012, ..., 2024)
+          - Columnas siguientes: Factores de conversión correspondientes a cada año de destino,
+            con valores numéricos que pueden usar coma (,) como separador decimal.
+    
     Retorna:
       DataFrame con el año base como índice (tipo int) y las columnas con los factores convertidos a float.
     """
     try:
-        # Cambia el separador si es necesario (por ejemplo, sep=";" o sep=",")
         df = pd.read_csv("factores_conversion.csv", dtype=str, encoding="latin-1", sep=";")
     except Exception as e:
         st.error(f"Error al cargar 'factores_conversion.csv': {e}")
         return None
 
-    # Obtener el nombre de la primera columna (se espera que contenga el año base)
+    # Nombre de la columna que contiene el año base (primer encabezado)
     base_year_col = df.columns[0]
 
-    # Convertir la columna a numérico, forzando valores no convertibles a NaN
+    # Convertir la primera columna a numérico (entero)
     df[base_year_col] = pd.to_numeric(df[base_year_col].str.strip(), errors="coerce")
-
-    # Verificar si se encontraron valores que no se pudieron convertir
     if df[base_year_col].isnull().any():
         st.error(
             f"Error al convertir la columna '{base_year_col}' a números. "
-            "Por favor, verifica que todos los valores de la columna sean numéricos."
+            "Por favor, verifica que todos los valores sean numéricos sin espacios adicionales."
         )
         return None
-
-    # Convertir la columna a entero
     df[base_year_col] = df[base_year_col].astype(int)
 
-    # Procesar las columnas restantes: eliminar espacios, reemplazar comas por puntos y convertir a float
+    # Procesar las columnas siguientes: eliminar espacios, reemplazar comas por puntos y convertir a float
     for col in df.columns[1:]:
-        df[col] = df[col].str.strip().str.replace(',', '.').astype(float)
+        df[col] = df[col].str.strip().str.replace(',', '.')
+        try:
+            df[col] = df[col].astype(float)
+        except Exception as e:
+            st.error(f"Error al convertir la columna '{col}' a float: {e}")
+            return None
 
-    # Establecer la primera columna como índice
+    # Establecer la primera columna (año base) como índice
     df.set_index(base_year_col, inplace=True)
     return df
 
@@ -149,21 +152,14 @@ def append_totals_with_column(df):
     y luego añade una fila de totales que sume cada columna, incluida la columna "Total".
     """
     df_copy = df.copy()
-    # Identificar las columnas de años (números)
     numeric_cols = [col for col in df_copy.columns if col.isdigit()]
-    # Agregar columna "Total" (suma de los valores de las columnas numéricas)
     df_copy["Total"] = df_copy[numeric_cols].sum(axis=1)
     
-    # Crear una fila con los totales de cada columna numérica y de la columna "Total"
     totals = {}
     for col in df_copy.columns:
-        if col in numeric_cols or col == "Total":
-            totals[col] = df_copy[col].sum()
-        else:
-            totals[col] = ""
+        totals[col] = df_copy[col].sum() if col in numeric_cols or col == "Total" else ""
     totals["ITEMS"] = "Total"
     totals_df = pd.DataFrame([totals])
-    # Concatenar la fila de totales al DataFrame original
     combined = pd.concat([df_copy, totals_df], ignore_index=True)
     return combined
 
@@ -171,7 +167,7 @@ def convert_expense_dataframe(df, dest_year, conversion_factors):
     """
     Convierte los valores de gasto en el DataFrame original al año (o escala) destino indicado, 
     utilizando los factores de conversión.
-
+    
     Para cada columna (año de origen) se aplica:
        Valor convertido = (Valor original * Factor de conversión) / 1000
 
@@ -180,7 +176,6 @@ def convert_expense_dataframe(df, dest_year, conversion_factors):
     """
     converted_df = df.copy()
     
-    # Iterar por cada columna que represente un año
     for col in df.columns:
         if col.isdigit():
             origin_year = int(col)
@@ -216,7 +211,7 @@ def main():
             return
         
         st.markdown("### Gasto Real no Ajustado Cuadro Completo (Valores Originales)")
-        # Configuración para el editor: se permite editar las columnas numéricas y se bloquea "ITEMS"
+        # Configuración para el editor: columnas numéricas editables y 'ITEMS' bloqueado
         col_config = {}
         for y in global_years:
             col = str(y)
@@ -233,10 +228,8 @@ def main():
         if validated_df is None:
             return
         
-        # Agregar columna "Total" a cada fila y la fila de totales final
+        # Agregar totales
         df_final = append_totals_with_column(validated_df)
-        
-        # Aplicar el formato de "Miles de Pesos" a las columnas numéricas
         df_formatted = df_final.copy()
         for col in df_formatted.columns:
             if col.isdigit() or col == "Total":
@@ -244,13 +237,12 @@ def main():
         
         st.dataframe(df_formatted, use_container_width=True)
         
-        # --- Conversión a la moneda (o escala) elegida por el usuario ---
+        # --- Conversión a la moneda (año de destino) seleccionada ---
         st.markdown("### Gasto Convertido a la Moneda Seleccionada")
         conversion_factors = load_conversion_factors()
         if conversion_factors is None:
             return
         
-        # En la barra lateral, el usuario selecciona la 'moneda' destino (identificada por un año en el CSV)
         available_moneda = sorted(conversion_factors.columns, key=lambda x: int(x))
         dest_moneda = st.sidebar.selectbox("Seleccione la moneda de destino (año de conversión):", available_moneda)
         
@@ -265,3 +257,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+
