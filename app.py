@@ -193,6 +193,35 @@ def convert_expense_dataframe(df, dest_year, conversion_factors):
             converted_df[col] = df[col] * factor / 1000
     return converted_df
 
+def generate_solicitud_financiamiento():
+    """
+    Genera la tabla "SOLICITUD DE FINANCIAMIENTO" con los siguientes campos:
+      - Fuente: Siempre "F.N.D.R."
+      - Asignación Presupuestaria: Ítems de financiamiento (ej.: Estudios, Obras, Administración, etc.)
+      - Moneda: Siempre "M$"
+      - Pagado al 31/12/2024: Montos pagados hasta esa fecha.
+      - Solicitado para el año 2025: Montos solicitados para el año 2025.
+      - Solicitado años siguientes: Montos proyectados para los años posteriores a 2025.
+      - Costo Total: Suma de las tres columnas anteriores.
+    """
+    # Datos de ejemplo; puedes modificar o ampliar estos ítems según el proyecto real.
+    data = [
+        {"Asignación Presupuestaria": "Estudios", "Pagado al 31/12/2024": 1000000, "Solicitado para el año 2025": 500000, "Solicitado años siguientes": 250000},
+        {"Asignación Presupuestaria": "Obras", "Pagado al 31/12/2024": 3000000, "Solicitado para el año 2025": 1500000, "Solicitado años siguientes": 750000},
+        {"Asignación Presupuestaria": "Administración", "Pagado al 31/12/2024": 500000, "Solicitado para el año 2025": 250000, "Solicitado años siguientes": 125000},
+    ]
+    df = pd.DataFrame(data)
+    df["Fuente"] = "F.N.D.R."
+    df["Moneda"] = "M$"
+    df["Costo Total"] = df["Pagado al 31/12/2024"] + df["Solicitado para el año 2025"] + df["Solicitado años siguientes"]
+    # Reordenar las columnas
+    df = df[["Fuente", "Asignación Presupuestaria", "Moneda", "Pagado al 31/12/2024", 
+             "Solicitado para el año 2025", "Solicitado años siguientes", "Costo Total"]]
+    # Formatear las columnas monetarias
+    for col in ["Pagado al 31/12/2024", "Solicitado para el año 2025", "Solicitado años siguientes", "Costo Total"]:
+        df[col] = df[col].apply(format_miles_pesos)
+    return df
+
 def main():
     st.title("Gasto Real no Ajustado Cuadro Completo")
     df_base = load_base_data()
@@ -223,51 +252,4 @@ def main():
         col_config["ITEMS"] = st.column_config.TextColumn(disabled=True)
         
         if hasattr(st, "data_editor"):
-            edited_df = st.data_editor(df_grouped, key="final_editor", column_config=col_config)
-        else:
-            edited_df = st.experimental_data_editor(df_grouped, key="final_editor", column_config=col_config)
-        
-        validated_df = validate_edited_data(edited_df, global_years)
-        if validated_df is None:
-            return
-        
-        df_final = append_totals_with_column(validated_df)
-        df_formatted = df_final.copy()
-        for col in df_formatted.columns:
-            if col.isdigit() or col == "Total":
-                df_formatted[col] = df_formatted[col].apply(format_miles_pesos)
-        
-        st.dataframe(df_formatted, use_container_width=True)
-        
-        # Cargar los factores de conversión
-        conversion_factors = load_conversion_factors()
-        if conversion_factors is None:
-            return
-        
-        available_moneda = sorted(conversion_factors.columns, key=lambda x: int(x))
-        # Seleccionar por defecto el año actual si está en la lista, de lo contrario, usar el primero.
-        default_year = str(datetime.now().year)
-        if default_year in available_moneda:
-            default_index = available_moneda.index(default_year)
-        else:
-            default_index = 0
-        dest_moneda = st.sidebar.selectbox(
-            "Seleccione la moneda de destino (año de conversión):",
-            available_moneda,
-            index=default_index
-        )
-        
-        # Actualizar el título incluyendo el año seleccionado
-        st.markdown(f"### Anualización de la Inversión en Moneda {dest_moneda}")
-        
-        df_converted = convert_expense_dataframe(validated_df, int(dest_moneda), conversion_factors)
-        df_converted_final = append_totals_with_column(df_converted)
-        df_converted_formatted = df_converted_final.copy()
-        for col in df_converted_formatted.columns:
-            if col.isdigit() or col == "Total":
-                df_converted_formatted[col] = df_converted_formatted[col].apply(format_miles_pesos)
-        
-        st.dataframe(df_converted_formatted, use_container_width=True)
-
-if __name__ == '__main__':
-    main()
+            edited_df = st.data_editor(df_grouped, key="final
