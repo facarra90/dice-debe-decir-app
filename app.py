@@ -252,21 +252,32 @@ def create_solicitud_financiamiento(df_conv):
 
 def main():
     st.title("Gasto Real no Ajustado Cuadro Completo")
+    
+    # Cargar datos base
     df_base = load_base_data()
     
     # Filtros en la barra lateral
     st.sidebar.header("Filtrar Datos")
+    
+    # Nuevo campo: Nombre del Proyecto
+    project_name = st.sidebar.text_input("Nombre del Proyecto:")
+    
     codigo_bip_list = sorted(df_base["CODIGO BIP"].dropna().unique().tolist())
     selected_codigo_bip = st.sidebar.selectbox("Seleccione el CODIGO BIP:", codigo_bip_list)
+    
     etapa_list = sorted(df_base["ETAPA"].dropna().unique().tolist())
     selected_etapa = st.sidebar.selectbox("Seleccione la ETAPA:", etapa_list)
+    
     anio_termino = st.sidebar.number_input("Ingrese el AÑO DE TERMINO del proyecto:",
                                            min_value=2011, max_value=2100, value=2024, step=1)
     
     if st.sidebar.button("Generar Planilla"):
         st.session_state.planilla_generada = True
-        
+
+    # Si se genera la planilla, se muestra el título con el nombre del proyecto, CODIGO BIP y ETAPA
     if st.session_state.planilla_generada:
+        st.header(f"Proyecto: {project_name} | Código BIP: {selected_codigo_bip} | Etapa: {selected_etapa}")
+        
         df_grouped, global_years, _ = get_filtered_data(df_base, selected_codigo_bip, selected_etapa, anio_termino)
         if df_grouped is None:
             return
