@@ -20,7 +20,7 @@ def load_conversion_factors():
     Carga y procesa el archivo 'factores_conversion.csv' siguiendo estos pasos:
     
     1. Abre el archivo usando open() con newline='' y encoding="latin-1".
-    2. Lee el archivo usando csv.reader con delimiter="\t" (según el error, los campos están separados por tabulaciones).
+    2. Lee el archivo usando csv.reader con delimiter="\t" (los campos están separados por tabulaciones).
     3. La primera fila es la cabecera:
          - La primera celda es un encabezado descriptivo (ej.: "AÑO Base").
          - Las siguientes celdas son los años de destino.
@@ -218,8 +218,9 @@ def main():
     if st.session_state.planilla_generada:
         # Extraer el nombre del proyecto en función del CODIGO BIP
         try:
-            project_name = df_base[df_base["CODIGO BIP"].astype(str).str.strip().str.upper() == 
-                                    str(selected_codigo_bip).strip().upper()]["NOMBRE"].iloc[0]
+            project_name = df_base[
+                df_base["CODIGO BIP"].astype(str).str.strip().str.upper() == str(selected_codigo_bip).strip().upper()
+            ]["NOMBRE"].iloc[0]
         except Exception as e:
             st.error(f"No se pudo obtener el nombre del proyecto para el CODIGO BIP {selected_codigo_bip}: {e}")
             return
@@ -231,6 +232,7 @@ def main():
             return
         
         st.markdown("### Gasto Real no Ajustado Cuadro Completo (Valores Originales)")
+        # Se aplica el formateo a los números
         col_config = {}
         for y in global_years:
             col = str(y)
@@ -253,8 +255,9 @@ def main():
             if col.isdigit() or col == "Total":
                 df_formatted[col] = df_formatted[col].apply(format_miles_pesos)
         
-        # Mostrar la tabla sin índice utilizando el Styler
-        st.dataframe(df_formatted.style.hide_index(), use_container_width=True)
+        # Mostrar la tabla sin índice convertida a HTML
+        html_table = df_formatted.to_html(index=False)
+        st.markdown(html_table, unsafe_allow_html=True)
         
         st.markdown("### Gasto Convertido a la Moneda Seleccionada")
         conversion_factors = load_conversion_factors()
@@ -271,13 +274,15 @@ def main():
             if col.isdigit() or col == "Total":
                 df_converted_formatted[col] = df_converted_formatted[col].apply(format_miles_pesos)
         
-        st.dataframe(df_converted_formatted.style.hide_index(), use_container_width=True)
+        html_table_conv = df_converted_formatted.to_html(index=False)
+        st.markdown(html_table_conv, unsafe_allow_html=True)
         
         st.markdown("### SOLICITUD DE FINANCIAMIENTO")
         df_solicitud = create_solicitud_financiamiento(df_converted)
         for col in ["Pagado al 31/12/2024", "Solicitado para el año 2025", "Solicitado años siguientes", "Costo Total"]:
             df_solicitud[col] = df_solicitud[col].apply(format_miles_pesos)
-        st.dataframe(df_solicitud.style.hide_index(), use_container_width=True)
+        html_solicitud = df_solicitud.to_html(index=False)
+        st.markdown(html_solicitud, unsafe_allow_html=True)
 
 if __name__ == '__main__':
     main()
