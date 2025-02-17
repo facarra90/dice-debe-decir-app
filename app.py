@@ -253,7 +253,8 @@ def main():
             if col.isdigit() or col == "Total":
                 df_formatted[col] = df_formatted[col].apply(format_miles_pesos)
         
-        st.dataframe(df_formatted, use_container_width=True)
+        # Mostrar la tabla sin índice utilizando el Styler
+        st.dataframe(df_formatted.style.hide_index(), use_container_width=True)
         
         st.markdown("### Gasto Convertido a la Moneda Seleccionada")
         conversion_factors = load_conversion_factors()
@@ -270,13 +271,13 @@ def main():
             if col.isdigit() or col == "Total":
                 df_converted_formatted[col] = df_converted_formatted[col].apply(format_miles_pesos)
         
-        st.dataframe(df_converted_formatted, use_container_width=True)
+        st.dataframe(df_converted_formatted.style.hide_index(), use_container_width=True)
         
         st.markdown("### SOLICITUD DE FINANCIAMIENTO")
         df_solicitud = create_solicitud_financiamiento(df_converted)
         for col in ["Pagado al 31/12/2024", "Solicitado para el año 2025", "Solicitado años siguientes", "Costo Total"]:
             df_solicitud[col] = df_solicitud[col].apply(format_miles_pesos)
-        st.dataframe(df_solicitud, use_container_width=True)
+        st.dataframe(df_solicitud.style.hide_index(), use_container_width=True)
 
 if __name__ == '__main__':
     main()
