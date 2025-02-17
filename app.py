@@ -232,7 +232,7 @@ def main():
         if df_grouped is None:
             return
         
-        # Cambiar título de la sección
+        # Título de la sección de gasto original
         st.markdown("### Gasto Real no Ajustado")
         
         # Configuración para edición de la tabla
@@ -262,15 +262,13 @@ def main():
         html_table = df_formatted.to_html(index=False)
         st.markdown(html_table, unsafe_allow_html=True)
         
-        st.markdown("### Gasto Convertido a la Moneda Seleccionada")
         conversion_factors = load_conversion_factors()
         if conversion_factors is None:
             return
         
         available_moneda = sorted(conversion_factors.columns, key=lambda x: int(x))
-        # Obtener el año actual como cadena
+        # Seleccionar el año actual por defecto, si está disponible
         current_year = str(datetime.now().year)
-        # Determinar el índice por defecto (si el año actual está en la lista, se usa su índice; si no, se usa 0)
         default_index = available_moneda.index(current_year) if current_year in available_moneda else 0
         dest_moneda = st.sidebar.selectbox(
             "Seleccione la moneda de destino (año de conversión):", 
@@ -284,6 +282,9 @@ def main():
         for col in df_converted_formatted.columns:
             if col.isdigit() or col == "Total":
                 df_converted_formatted[col] = df_converted_formatted[col].apply(format_miles_pesos)
+        
+        # Título de la sección de conversión con el año seleccionado
+        st.markdown(f"### Anualizacion en Moneda {dest_moneda} (M$)")
         
         html_table_conv = df_converted_formatted.to_html(index=False)
         st.markdown(html_table_conv, unsafe_allow_html=True)
