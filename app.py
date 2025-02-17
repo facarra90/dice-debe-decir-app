@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import csv
+from datetime import datetime
 
 # Configurar la página para que use el ancho completo
 st.set_page_config(layout="wide")
@@ -231,8 +232,10 @@ def main():
         if df_grouped is None:
             return
         
-        st.markdown("### Gasto Real no Ajustado Cuadro Completo (Valores Originales)")
-        # Se aplica el formateo a los números
+        # Cambiar título de la sección
+        st.markdown("### Gasto Real no Ajustado")
+        
+        # Configuración para edición de la tabla
         col_config = {}
         for y in global_years:
             col = str(y)
@@ -265,7 +268,15 @@ def main():
             return
         
         available_moneda = sorted(conversion_factors.columns, key=lambda x: int(x))
-        dest_moneda = st.sidebar.selectbox("Seleccione la moneda de destino (año de conversión):", available_moneda)
+        # Obtener el año actual como cadena
+        current_year = str(datetime.now().year)
+        # Determinar el índice por defecto (si el año actual está en la lista, se usa su índice; si no, se usa 0)
+        default_index = available_moneda.index(current_year) if current_year in available_moneda else 0
+        dest_moneda = st.sidebar.selectbox(
+            "Seleccione la moneda de destino (año de conversión):", 
+            available_moneda, 
+            index=default_index
+        )
         
         df_converted = convert_expense_dataframe(validated_df, int(dest_moneda), conversion_factors)
         df_converted_final = append_totals_with_column(df_converted)
