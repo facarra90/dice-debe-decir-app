@@ -36,8 +36,8 @@ th, td {
     padding: 8px;
     text-align: left;
 }
-tr:nth-child(even){background-color: #f2f2f2;}
-    
+/* Se ha eliminado el estilo de bandas de colores alternadas */
+
 /* Estilos para la barra lateral: fondo Pantone 290 U (#D1E8FF) y letras Pantone 2935 U (#0072CE) */
 [data-testid="stSidebar"] > div:first-child {
     background-color: #D1E8FF;
@@ -239,8 +239,6 @@ def create_solicitud_financiamiento(df_conv):
     return df_solicitud
 
 def main():
-    # Se ha eliminado el título principal "Gasto Real no Ajustado Cuadro Completo"
-    
     # Filtros en la barra lateral: se cambia el encabezado a "Seleccionar Proyecto FNDR"
     st.sidebar.header("Seleccionar Proyecto FNDR")
     
