@@ -239,14 +239,27 @@ def create_solicitud_financiamiento(df_conv):
     return df_solicitud
 
 def main():
-    # Filtros en la barra lateral: se cambia el encabezado a "Seleccionar Proyecto FNDR"
+    # Cambiamos el encabezado de la barra lateral
     st.sidebar.header("Seleccionar Proyecto FNDR")
     
     df_base = load_base_data()
     
-    codigo_bip_list = sorted(df_base["CODIGO BIP"].dropna().unique().tolist())
-    selected_codigo_bip = st.sidebar.selectbox("Seleccione el CODIGO BIP:", codigo_bip_list)
+    # Construir la lista de opciones para el selectbox combinando "CODIGO BIP" y "NOMBRE(s)"
+    unique_codes = df_base["CODIGO BIP"].dropna().unique().tolist()
+    code_options = []
+    for code in unique_codes:
+        nombres = df_base[
+            df_base["CODIGO BIP"].astype(str).str.strip().str.upper() == str(code).strip().upper()
+        ]["NOMBRE"].unique().tolist()
+        nombres_str = ", ".join(nombres)
+        code_options.append(f"{code} – {nombres_str}")
+    code_options = sorted(code_options)
     
+    # Mostrar el selectbox con las opciones combinadas
+    selected_option = st.sidebar.selectbox("Seleccione el CODIGO BIP:", code_options)
+    selected_codigo_bip = selected_option.split(" – ")[0]
+    
+    # Selección de ETAPA
     etapa_list = sorted(df_base["ETAPA"].dropna().unique().tolist())
     selected_etapa = st.sidebar.selectbox("Seleccione la ETAPA:", etapa_list)
     
@@ -257,7 +270,6 @@ def main():
         st.session_state.planilla_generada = True
 
     if st.session_state.planilla_generada:
-        # Extraer el nombre del proyecto en función del CODIGO BIP
         try:
             project_name = df_base[
                 df_base["CODIGO BIP"].astype(str).str.strip().str.upper() == str(selected_codigo_bip).strip().upper()
@@ -272,7 +284,6 @@ def main():
         if df_grouped is None:
             return
         
-        # Título de la sección de gasto original
         st.markdown("### Gasto Real no Ajustado")
         
         # Configuración para edición de la tabla
@@ -298,7 +309,6 @@ def main():
             if col.isdigit() or col == "Total":
                 df_formatted[col] = df_formatted[col].apply(format_miles_pesos)
         
-        # Mostrar la tabla sin índice convertida a HTML con estilo institucional
         html_table = df_formatted.to_html(index=False)
         st.markdown(html_table, unsafe_allow_html=True)
         
@@ -307,7 +317,6 @@ def main():
             return
         
         available_moneda = sorted(conversion_factors.columns, key=lambda x: int(x))
-        # Seleccionar el año actual por defecto, si está disponible
         current_year = str(datetime.now().year)
         default_index = available_moneda.index(current_year) if current_year in available_moneda else 0
         dest_moneda = st.sidebar.selectbox(
@@ -323,9 +332,7 @@ def main():
             if col.isdigit() or col == "Total":
                 df_converted_formatted[col] = df_converted_formatted[col].apply(format_miles_pesos)
         
-        # Título de la sección de conversión con el año seleccionado
         st.markdown(f"### Anualizacion en Moneda {dest_moneda} (M$)")
-        
         html_table_conv = df_converted_formatted.to_html(index=False)
         st.markdown(html_table_conv, unsafe_allow_html=True)
         
