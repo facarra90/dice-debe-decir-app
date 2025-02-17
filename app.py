@@ -239,13 +239,12 @@ def create_solicitud_financiamiento(df_conv):
     return df_solicitud
 
 def main():
-    st.title("Gasto Real no Ajustado Cuadro Completo")
+    # Se ha eliminado el título principal "Gasto Real no Ajustado Cuadro Completo"
     
-    # Cargar datos base
+    # Filtros en la barra lateral: se cambia el encabezado a "Seleccionar Proyecto FNDR"
+    st.sidebar.header("Seleccionar Proyecto FNDR")
+    
     df_base = load_base_data()
-    
-    # Filtros en la barra lateral
-    st.sidebar.header("Filtrar Datos")
     
     codigo_bip_list = sorted(df_base["CODIGO BIP"].dropna().unique().tolist())
     selected_codigo_bip = st.sidebar.selectbox("Seleccione el CODIGO BIP:", codigo_bip_list)
