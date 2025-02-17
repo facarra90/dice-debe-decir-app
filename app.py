@@ -3,10 +3,10 @@ import pandas as pd
 import csv
 from datetime import datetime
 
-# Configurar la página para que use el ancho completo y establecer título e ícono institucional (opcional)
-st.set_page_config(layout="wide", page_title="Gobierno Regional de Los Lagos", page_icon="🌐")
+# Configurar la página para que use el ancho completo y establecer título e ícono (opcional)
+st.set_page_config(layout="wide", page_title="Cuadro Completo", page_icon="🌐")
 
-# Inyección de CSS para adaptar la tipografía e identidad visual del Manual de Normas Gráficas 2023
+# Inyección de CSS para adaptar la tipografía e identidad visual según el Manual de Normas Gráficas
 st.markdown("""
 <style>
 /* Tipografía institucional: Gill Sans */
@@ -14,7 +14,7 @@ body, .css-18ni7ap, .css-1d391kg {
     font-family: 'Gill Sans', sans-serif;
 }
 
-/* Encabezados con color institucional (Pantone 2935 U - se usa como referencia, ajústalo si es necesario) */
+/* Encabezados con color institucional (Pantone 2935 U) */
 h1, h2, h3, h4, h5, h6 {
     color: #0072CE;
 }
@@ -37,6 +37,15 @@ th, td {
     text-align: left;
 }
 tr:nth-child(even){background-color: #f2f2f2;}
+    
+/* Estilos para la barra lateral: fondo Pantone 290 U (#D1E8FF) y letras Pantone 2935 U (#0072CE) */
+[data-testid="stSidebar"] > div:first-child {
+    background-color: #D1E8FF;
+    color: #0072CE;
+}
+[data-testid="stSidebar"] label, [data-testid="stSidebar"] p, [data-testid="stSidebar"] span {
+    color: #0072CE;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -230,15 +239,7 @@ def create_solicitud_financiamiento(df_conv):
     return df_solicitud
 
 def main():
-    # Encabezado principal con la identidad del Gobierno Regional de Los Lagos
     st.title("Gasto Real no Ajustado Cuadro Completo")
-    
-    # Opcional: mostrar el logotipo institucional (si se cuenta con la imagen)
-    # st.image("logo_gore.png", width=200)
-    
-    # Encabezado en la barra lateral para reforzar la identidad institucional
-    st.sidebar.markdown("<h2 style='color: #0072CE;'>Gobierno Regional de Los Lagos</h2>", unsafe_allow_html=True)
-    st.sidebar.markdown("<h4 style='color: #0072CE;'>Manual de Normas Gráficas 2023</h4>", unsafe_allow_html=True)
     
     # Cargar datos base
     df_base = load_base_data()
