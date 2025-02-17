@@ -31,17 +31,13 @@ def load_conversion_factors():
     """
     factors = {}
     try:
-        # Cambia el delimitador a "\t" porque los errores indican que se usan tabulaciones
         with open("factores_conversion.csv", newline='', encoding="latin-1") as csvfile:
             reader = csv.reader(csvfile, delimiter="\t")
-            # Leer la cabecera (no se convierte a números)
             header = next(reader)
-            # La primera celda es descriptiva; las siguientes son los años de destino.
             destination_years = [col.strip() for col in header[1:]]
             for row in reader:
                 if not row:
-                    continue  # omitir filas vacías
-                # El primer elemento debe ser el año base: eliminar espacios y convertir a entero.
+                    continue
                 try:
                     base_year = int(row[0].strip())
                 except Exception as e:
@@ -49,21 +45,18 @@ def load_conversion_factors():
                     return None
                 subdict = {}
                 for i, val in enumerate(row[1:], start=1):
-                    # Eliminar espacios y reemplazar coma por punto
                     val_clean = val.strip().replace(",", ".")
                     try:
                         factor = float(val_clean)
                     except Exception as e:
                         st.error(f"Error al convertir el valor '{val}' en la fila con año base {base_year}: {e}")
                         return None
-                    # Asignar el factor al año de destino correspondiente
                     subdict[destination_years[i-1]] = factor
                 factors[base_year] = subdict
     except Exception as e:
         st.error(f"Error al leer 'factores_conversion.csv': {e}")
         return None
 
-    # Convertir el diccionario a DataFrame
     df_factors = pd.DataFrame.from_dict(factors, orient="index")
     df_factors.index.name = header[0].strip()
     return df_factors
@@ -79,7 +72,6 @@ def format_miles_pesos(x):
         return x
 
 def get_filtered_data(df_base, codigo_bip, etapa, anio_termino):
-    # Normalizar los filtros
     codigo_bip_norm = str(codigo_bip).strip().upper()
     etapa_norm = str(etapa).strip().upper()
     df_filtered = df_base[
@@ -90,14 +82,10 @@ def get_filtered_data(df_base, codigo_bip, etapa, anio_termino):
         st.error("No se encontraron datos para el CODIGO BIP y ETAPA seleccionados.")
         return None, None, None
 
-    # Quitar espacios en los nombres de columnas
     df_filtered.columns = [str(col).strip() for col in df_filtered.columns]
-    # Seleccionar columnas que representan años (2011 a 2024)
     expense_cols = [col for col in df_filtered.columns if col.isdigit() and 2011 <= int(col) <= 2024]
-    # Agrupar por "ITEMS" y sumar los gastos de cada año
     df_grouped = df_filtered.groupby("ITEMS")[expense_cols].sum().reset_index()
 
-    # Determinar el primer año en el que se registra gasto
     sorted_years = sorted([int(col) for col in expense_cols])
     start_year = None
     for y in sorted_years:
@@ -111,22 +99,17 @@ def get_filtered_data(df_base, codigo_bip, etapa, anio_termino):
         st.error("El AÑO DE TERMINO debe ser mayor o igual al año de inicio del gasto.")
         return None, None, None
 
-    # Crear la lista de años desde el inicio hasta el AÑO DE TERMINO
     global_years = list(range(start_year, anio_termino + 1))
-    # Forzar la inclusión del año 2025
     if 2025 not in global_years:
         global_years.append(2025)
         global_years.sort()
 
-    # Asegurar que exista una columna para cada año en la lista
     cols = [str(y) for y in global_years]
     for col in cols:
         if col not in df_grouped.columns:
             df_grouped[col] = 0
 
-    # Reordenar las columnas: "ITEMS" seguido de los años en orden
     df_grouped = df_grouped[["ITEMS"] + cols].sort_values("ITEMS")
-    # Convertir las columnas de año a valores numéricos
     for col in df_grouped.columns:
         if col.isdigit():
             df_grouped[col] = pd.to_numeric(df_grouped[col], errors="coerce").fillna(0)
@@ -150,10 +133,6 @@ def validate_edited_data(df, global_years):
     return df
 
 def append_totals_with_column(df):
-    """
-    Agrega una columna "Total" a cada fila con la suma de los valores numéricos (años),
-    y luego añade una fila de totales que sume cada columna, incluida la columna "Total".
-    """
     df_copy = df.copy()
     numeric_cols = [col for col in df_copy.columns if col.isdigit()]
     df_copy["Total"] = df_copy[numeric_cols].sum(axis=1)
@@ -170,18 +149,7 @@ def append_totals_with_column(df):
     return combined
 
 def convert_expense_dataframe(df, dest_year, conversion_factors):
-    """
-    Convierte los valores de gasto en el DataFrame original al año (o escala) destino indicado, 
-    utilizando los factores de conversión.
-    
-    Para cada columna (año de origen) se aplica:
-       Valor convertido = (Valor original * Factor de conversión) / 1000
-
-    Si el año de origen no se encuentra en conversion_factors, se usa el máximo año base disponible.
-    Si el año destino no existe en la tabla, se utiliza el factor correspondiente al máximo año destino.
-    """
     converted_df = df.copy()
-    
     for col in df.columns:
         if col.isdigit():
             origin_year = int(col)
@@ -196,36 +164,14 @@ def convert_expense_dataframe(df, dest_year, conversion_factors):
     return converted_df
 
 def create_solicitud_financiamiento(df_conv):
-    """
-    A partir del DataFrame de la inversión anualizada en moneda (df_conv), genera la tabla
-    SOLICITUD DE FINANCIAMIENTO con las siguientes columnas:
-    
-      - Fuente: siempre "F.N.D.R."
-      - Asignación Presupuestaria (Item): contenido de "ITEMS"
-      - Moneda: siempre "M$"
-      - Pagado al 31/12/2024: suma de los años anteriores a 2025 (los años < 2025)
-      - Solicitado para el año 2025: valor de la columna "2025"
-      - Solicitado años siguientes: suma de los años mayores a 2025 (años > 2025)
-      - Costo Total: suma de las tres columnas anteriores.
-    
-    Además, agrega una fila total al final que sume los campos numéricos.
-    """
-    # Seleccionar solo las columnas que sean años (en formato dígito) y la columna "ITEMS"
     year_cols = [col for col in df_conv.columns if col.isdigit()]
-    
-    # Se crea la tabla base usando la información de cada fila
     data = []
     for idx, row in df_conv.iterrows():
-        # Si la fila es la fila total (por ejemplo, si "ITEMS" es "Total"), se procesará al final.
         if str(row["ITEMS"]).strip().upper() == "TOTAL":
             continue
-        # Sumar los años anteriores a 2025
         pagado = sum(row[col] for col in year_cols if int(col) < 2025)
-        # Valor para 2025
         solicitado_2025 = row["2025"] if "2025" in row and pd.notnull(row["2025"]) else 0
-        # Sumar los años siguientes a 2025
         solicitado_siguientes = sum(row[col] for col in year_cols if int(col) > 2025)
-        # Costo Total
         costo_total = pagado + solicitado_2025 + solicitado_siguientes
         data.append({
             "Fuente": "F.N.D.R.",
@@ -238,8 +184,6 @@ def create_solicitud_financiamiento(df_conv):
         })
         
     df_solicitud = pd.DataFrame(data)
-    
-    # Calcular la fila de totales para las columnas numéricas
     total_row = {
         "Fuente": "",
         "Asignación Presupuestaria (Item)": "Total",
@@ -259,9 +203,6 @@ def main():
     # Filtros en la barra lateral
     st.sidebar.header("Filtrar Datos")
     
-    # Nuevo campo: Nombre del Proyecto
-    project_name = st.sidebar.text_input("Nombre del Proyecto:")
-    
     codigo_bip_list = sorted(df_base["CODIGO BIP"].dropna().unique().tolist())
     selected_codigo_bip = st.sidebar.selectbox("Seleccione el CODIGO BIP:", codigo_bip_list)
     
@@ -274,8 +215,15 @@ def main():
     if st.sidebar.button("Generar Planilla"):
         st.session_state.planilla_generada = True
 
-    # Si se genera la planilla, se muestra el título con el nombre del proyecto, CODIGO BIP y ETAPA
     if st.session_state.planilla_generada:
+        # Extraer el nombre del proyecto en función del CODIGO BIP
+        try:
+            project_name = df_base[df_base["CODIGO BIP"].astype(str).str.strip().str.upper() == 
+                                    str(selected_codigo_bip).strip().upper()]["NOMBRE"].iloc[0]
+        except Exception as e:
+            st.error(f"No se pudo obtener el nombre del proyecto para el CODIGO BIP {selected_codigo_bip}: {e}")
+            return
+        
         st.header(f"Proyecto: {project_name} | Código BIP: {selected_codigo_bip} | Etapa: {selected_etapa}")
         
         df_grouped, global_years, _ = get_filtered_data(df_base, selected_codigo_bip, selected_etapa, anio_termino)
@@ -324,12 +272,8 @@ def main():
         
         st.dataframe(df_converted_formatted, use_container_width=True)
         
-        # Nueva tabla: SOLICITUD DE FINANCIAMIENTO
         st.markdown("### SOLICITUD DE FINANCIAMIENTO")
-        # Se genera la tabla a partir del DataFrame convertido (sin la fila total, para evitar duplicados)
-        # Se toma df_converted ya que contiene los valores en moneda convertida (M$)
         df_solicitud = create_solicitud_financiamiento(df_converted)
-        # Opcional: formatear los números de la nueva tabla
         for col in ["Pagado al 31/12/2024", "Solicitado para el año 2025", "Solicitado años siguientes", "Costo Total"]:
             df_solicitud[col] = df_solicitud[col].apply(format_miles_pesos)
         st.dataframe(df_solicitud, use_container_width=True)
