@@ -244,9 +244,21 @@ def main():
     
     df_base = load_base_data()
     
+    # Selección de CODIGO BIP y previsualización de los nombres asociados
     codigo_bip_list = sorted(df_base["CODIGO BIP"].dropna().unique().tolist())
     selected_codigo_bip = st.sidebar.selectbox("Seleccione el CODIGO BIP:", codigo_bip_list)
     
+    # Filtrar y mostrar en la barra lateral los nombres asociados al código seleccionado
+    nombres_asociados = df_base[
+        df_base["CODIGO BIP"].astype(str).str.strip().str.upper() == str(selected_codigo_bip).strip().upper()
+    ]["NOMBRE"].unique()
+    
+    if nombres_asociados.size > 0:
+        st.sidebar.markdown("**Nombres asociados:**")
+        for nombre in nombres_asociados:
+            st.sidebar.write(nombre)
+    
+    # Selección de ETAPA
     etapa_list = sorted(df_base["ETAPA"].dropna().unique().tolist())
     selected_etapa = st.sidebar.selectbox("Seleccione la ETAPA:", etapa_list)
     
@@ -257,7 +269,7 @@ def main():
         st.session_state.planilla_generada = True
 
     if st.session_state.planilla_generada:
-        # Extraer el nombre del proyecto en función del CODIGO BIP
+        # Extraer el nombre del proyecto en función del CODIGO BIP (se toma el primer nombre disponible)
         try:
             project_name = df_base[
                 df_base["CODIGO BIP"].astype(str).str.strip().str.upper() == str(selected_codigo_bip).strip().upper()
